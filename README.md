@@ -12,6 +12,7 @@ CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain,
 | --- | --- |
 | [Quick start](#quick-start) | Run your first audit over USB or Wi-Fi |
 | [Diagnose lag and Battery Saver](docs/performance.md) | Measure what changes when your phone stutters |
+| [Reduce OEM ads and preinstalls](docs/ads-and-preinstalls.md) | Audit OPPO, vivo, and Nothing recommendation components and configure optional DNS filtering |
 | [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
 | [Clean up large files](#clean-up-large-files) | Verify a backup and a retained copy before removing a duplicate |
 | [Use a coding assistant](#use-a-coding-assistant) | Set up Claude Code, Cursor, OpenCode, Codex, or another agent |
@@ -87,7 +88,9 @@ cleanyourandroid diagnose
 | --- | --- |
 | `--disable-auto-saver` | Turn off the percentage-based Battery Saver trigger. Manual Battery Saver remains available. This can shorten the last stretch of battery runtime. |
 | `--disable-always-on-mobile-data` | Allow the extra cellular data session to close while Wi-Fi is connected. Handoff may take longer. |
-| `--disable-aura` | Disable the verified preloaded Aura recommendation component on eligible Nothing builds. App data is retained. |
+| `--disable-package PACKAGE` | Disable a verified optional OPPO, vivo, or Nothing preinstall for the primary user and keep its data. |
+| `--remove-preinstall PACKAGE` | Remove an eligible base-image preinstall for the primary user and keep its data. The factory APK remains available for restore. |
+| `--private-dns HOSTNAME` | Set a reviewed DNS-over-TLS provider. A filtering resolver can block some network ad domains. |
 | `--clear-cache PACKAGE` | Clear only the cache for a listed app when Android supports the command. Use App info → Storage and cache → **Clear cache** if the result is unconfirmed. |
 
 To undo the reversible settings and package changes:
@@ -96,7 +99,7 @@ To undo the reversible settings and package changes:
 cleanyourandroid restore .cyandroid/rollback.json
 ```
 
-A cache clear cannot be reversed. After firmware updates, run a fresh audit and review any new plan.
+A cache clear cannot be reversed. After firmware updates, run a fresh audit and review any new plan. Start with `cleanyourandroid ads` for OEM recommendation controls, per-user debloat candidates, and Private DNS. [Ads and preinstalled apps](docs/ads-and-preinstalls.md)
 
 ## Clean up large files
 
@@ -135,7 +138,7 @@ The [agent installation guide](docs/agents.md) covers native Claude Code and Cod
 
 ## Compatibility and privacy
 
-The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**, using USB. Output and available commands vary by Android release and OEM. The initial debloat rule is deliberately limited to a component verified on Nothing. Private Space and cloned app profiles are outside the cleanup scope.
+The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**, using USB. Output and available commands vary by Android release and OEM. OPPO and vivo rules are simulator-tested. Physical-device reports are welcome. Private Space and cloned app profiles are outside the cleanup scope.
 
 Diagnostics, file names, approvals, and backups stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers, or filenames.
 

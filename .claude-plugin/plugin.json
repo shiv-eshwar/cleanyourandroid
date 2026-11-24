@@ -1,6 +1,6 @@
 {
   "name": "cleanyourandroid",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Audit Android performance over ADB and apply reviewed, backup-first maintenance.",
   "author": { "name": "shiv-eshwar" },
   "homepage": "https://github.com/shiv-eshwar/cleanyourandroid",

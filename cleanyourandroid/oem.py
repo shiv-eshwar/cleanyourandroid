@@ -12,7 +12,7 @@ IMAGE_PREFIXES = ("/system/", "/system_ext/", "/product/", "/vendor/", "/odm/")
 
 @dataclass(frozen=True)
 class Rule:
-    manufacturer: str
+    manufacturer: str | None
     label: str
     purpose: str
     impact: str
@@ -31,6 +31,18 @@ RULES = {
         "vivo", "vivo V-Appstore", "OEM app store that may provide Hot Apps and Hot Games.",
         "This can stop an OEM store or updater you use. Try turning off Hot Apps and Hot Games inside the store first.",
         ("com.vivo.appstore.", "/VivoAppStore", "/AppStore")),
+    "com.netflix.mediaclient": Rule(
+        None, "Netflix", "Optional streaming app when supplied as a system preinstall.",
+        "Netflix and its downloads will be inaccessible until you restore the app.",
+        ("com.netflix.mediaclient.", "/Netflix")),
+    "com.amazon.mShop.android.shopping": Rule(
+        None, "Amazon Shopping", "Optional shopping app when supplied as a system preinstall.",
+        "Amazon Shopping and its alerts will be unavailable until you restore the app.",
+        ("com.amazon.mShop.", "/AmazonShopping")),
+    "com.booking": Rule(
+        None, "Booking.com", "Optional travel app when supplied as a system preinstall.",
+        "Use the website or keep the app if you rely on it for trips or alerts.",
+        ("com.booking.", "/Booking")),
 }
 
 
@@ -59,6 +71,10 @@ def manufacturer(device):
     return device.prop("ro.product.manufacturer").strip().casefold()
 
 
+def applies_to(rule, brand):
+    return rule.manufacturer is None or rule.manufacturer == brand
+
+
 def package_state(device, package):
     dump = device.shell("dumpsys", "package", package)
     match = re.search(r"^[ \t]*User 0: [^\n]*\binstalled=(true|false)[^\n]*\benabled=([0-4])\b", dump, re.M)
@@ -85,7 +101,7 @@ def protected_packages(device):
 
 def verified_candidates(device, *, strict=False):
     brand = manufacturer(device)
-    candidates = {name for name, rule in RULES.items() if rule.manufacturer == brand}
+    candidates = {name for name, rule in RULES.items() if applies_to(rule, brand)}
     present = candidates & packages(device, "-s")
     if not present:
         return []
@@ -114,7 +130,7 @@ def verified_candidates(device, *, strict=False):
             continue
         # Per-user removal can reliably retain the same version only for an APK on the system image.
         base_image = all(path.startswith(IMAGE_PREFIXES) for path in code_paths) and "UPDATED_SYSTEM_APP" not in dump
-        store_fallback = rule.manufacturer == "nothing" or "com.android.vending" in enabled
+        store_fallback = rule.manufacturer not in {"oppo", "vivo"} or "com.android.vending" in enabled
         rows.append({
             "package": name, "label": rule.label, "reason": rule.purpose, "impact": rule.impact,
             "disable_allowed": name in enabled and store_fallback,

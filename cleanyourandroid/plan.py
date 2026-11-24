@@ -239,7 +239,7 @@ def restore(device, journal_path):
             if op.get("state") not in {"pending", "started", "applied", "unchanged", "restoring", "restored"}:
                 raise DeviceError("Invalid journal state.")
             verify_prior(op, op.get("before"))
-            if op["kind"] in APP_ACTIONS and oem.RULES[op["target"]].manufacturer != oem.manufacturer(device):
+            if op["kind"] in APP_ACTIONS and not oem.applies_to(oem.RULES[op["target"]], oem.manufacturer(device)):
                 raise DeviceError("The saved app rule does not match this manufacturer.")
         errors = []
         for op in reversed(entries):

@@ -88,7 +88,7 @@ cleanyourandroid diagnose
 | --- | --- |
 | `--disable-auto-saver` | Turn off the percentage-based Battery Saver trigger. Manual Battery Saver remains available. This can shorten the last stretch of battery runtime. |
 | `--disable-always-on-mobile-data` | Allow the extra cellular data session to close while Wi-Fi is connected. Handoff may take longer. |
-| `--disable-package PACKAGE` | Disable a verified optional OPPO, vivo, or Nothing preinstall for the primary user and keep its data. |
+| `--disable-package PACKAGE` | Disable a verified optional preinstall for the primary user and keep its data. |
 | `--remove-preinstall PACKAGE` | Remove an eligible base-image preinstall for the primary user and keep its data. The factory APK remains available for restore. |
 | `--private-dns HOSTNAME` | Set a reviewed DNS-over-TLS provider. A filtering resolver can block some network ad domains. |
 | `--clear-cache PACKAGE` | Clear only the cache for a listed app when Android supports the command. Use App info → Storage and cache → **Clear cache** if the result is unconfirmed. |

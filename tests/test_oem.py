@@ -109,6 +109,15 @@ class OEMTests(unittest.TestCase):
             self.assertTrue(candidate["disable_allowed"])
             self.assertTrue(candidate["remove_for_primary_user_allowed"])
 
+    def test_optional_preinstall_works_on_other_brands_without_targeting_user_apps(self):
+        phone = Phone("other", "com.netflix.mediaclient")
+        candidate, = oem.verified_candidates(phone)
+        self.assertTrue(candidate["disable_allowed"])
+        self.assertTrue(candidate["remove_for_primary_user_allowed"])
+        phone.system = False
+        self.assertEqual(oem.verified_candidates(phone), [])
+        self.assertFalse(phone.mutations)
+
     def test_rule_refuses_protected_and_uncorroborated_packages(self):
         for field, value in (
             ("brand", "unknown"), ("shared_uid", True), ("system", False),

@@ -1,0 +1,12 @@
+{
+  "name": "cleanyourandroid",
+  "owner": { "name": "shiv-eshwar" },
+  "metadata": { "description": "Local Android performance and maintenance tools." },
+  "plugins": [
+    {
+      "name": "cleanyourandroid",
+      "source": "./",
+      "description": "Audit and safely maintain an Android phone over local ADB."
+    }
+  ]
+}

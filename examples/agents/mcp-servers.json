@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cleanyourandroid": {
+      "command": "uvx",
+      "args": [
+        "--python", "3.12",
+        "--from", "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@v0.1.1",
+        "cleanyourandroid-mcp"
+      ]
+    }
+  }
+}

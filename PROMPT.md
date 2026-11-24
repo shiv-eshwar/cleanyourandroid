@@ -1,3 +1,3 @@
-Audit my Android phone with CleanYourAndroid. Start with device detection and read-only diagnostics. I care about lag, heat, battery drain, and data preservation.
+Audit my Android phone with CleanYourAndroid. Start with device detection and read-only diagnostics. Use the local CLI from this checkout or the configured CleanYourAndroid MCP tools for the audit. I care about lag, heat, battery drain, and data preservation.
 
 Explain what the measurements support. If you find a reversible setting, optional app, or large file worth removing, show me the specific action and tradeoff before proceeding. Use this repository's plans, backup verification, and restore commands. Keep my existing interface and preserve my primary and private data. Summarize what changed and what you verified.

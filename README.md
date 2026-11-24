@@ -10,7 +10,7 @@ CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain,
 | [Diagnose lag and Battery Saver](docs/performance.md) | Measure what changes when your phone stutters |
 | [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
 | [Clean up large files](#clean-up-large-files) | Verify a backup and a retained copy before removing a duplicate |
-| [Use a coding assistant](#use-a-coding-assistant) | Install a Codex plugin, a standalone skill, or a local MCP server |
+| [Use a coding assistant](#use-a-coding-assistant) | Set up Claude Code, Cursor, OpenCode, Codex, or another agent |
 
 ## Quick start
 
@@ -120,32 +120,13 @@ The restore command is optional and skips identical existing files. It refuses t
 
 ## Use a coding assistant
 
-### Codex plugin
-
-Install the CLI first and make sure the local Codex session can see it and ADB.
+Use one shared skill with Claude Code, Cursor, OpenCode, Codex, and other Agent Skills clients.
 
 ```sh
-codex plugin marketplace add shiv-eshwar/cleanyourandroid
-codex plugin add cleanyourandroid@cleanyourandroid
+npx --yes skills add shiv-eshwar/cleanyourandroid --skill cleanyourandroid --agent claude-code cursor opencode
 ```
 
-Invoke `$cleanyourandroid` in a new session. You can also register an existing checkout using `codex plugin marketplace add /absolute/path/to/cleanyourandroid`.
-
-### Standalone skill
-
-Copy [the skill folder](skills/cleanyourandroid) into your agent's skills directory. For Codex, either copy it to `~/.agents/skills/` or include it in the repository's `.agents/skills/` directory. You can also paste [PROMPT.md](PROMPT.md) into a local coding assistant with the checkout open.
-
-### Local MCP server
-
-The MCP server exposes device discovery, audits, performance readings, and frame counters. It uses stdio on the computer attached to the phone. Cleanup actions are handled by the local CLI with approval.
-
-```sh
-codex mcp add cleanyourandroid -- uvx --python 3.12 \
-  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git" \
-  cleanyourandroid-mcp
-```
-
-For other stdio clients, install the checkout with `python -m pip install ".[mcp]"` and configure the server command with the absolute path to the installed `cleanyourandroid-mcp` executable. If your client has a restricted PATH, set `CLEANYOURANDROID_ADB` to the absolute Platform-Tools path in the server environment.
+The [agent installation guide](docs/agents.md) covers native Claude Code and Codex plugins, manual skill installation, and ready-to-copy read-only MCP configurations. For any local shell-capable coding agent, open this checkout and paste [PROMPT.md](PROMPT.md).
 
 ## Compatibility and privacy
 

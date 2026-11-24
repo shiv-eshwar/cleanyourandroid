@@ -11,6 +11,7 @@ CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain,
 | [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
 | [Clean up large files](#clean-up-large-files) | Verify a backup and a retained copy before removing a duplicate |
 | [Use a coding assistant](#use-a-coding-assistant) | Set up Claude Code, Cursor, OpenCode, Codex, or another agent |
+| [Contribute](#contribute) | Share a tested finding from your phone |
 
 ## Quick start
 
@@ -134,6 +135,10 @@ The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**,
 
 Diagnostics, file names, approvals, and backups stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers, or filenames.
 
-For development, run `python -m unittest discover -s tests -v`. Share reproducible reports using the manufacturer, model, Android version, and build. Keep device identifiers, personal files, and raw logs out of issues and pull requests.
+## Contribute
+
+**Found something on your phone that belongs here? Open a pull request.** Device compatibility notes, verified optional packages, reproducible performance findings, and documentation improvements all help. Include your phone model, Android version, build, and what you tested. If you are still investigating, start with a [device report](https://github.com/shiv-eshwar/cleanyourandroid/issues/new?template=device-report.yml).
+
+[Contributing guide](CONTRIBUTING.md) · [Pull requests](https://github.com/shiv-eshwar/cleanyourandroid/pulls) · [Security reporting](SECURITY.md)
 
 Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv) and its inspect, review, and restore workflow. CleanYourAndroid is an independently implemented, performance-focused phone project. [MIT License](LICENSE).

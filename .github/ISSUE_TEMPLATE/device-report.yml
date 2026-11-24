@@ -1,0 +1,39 @@
+name: Phone compatibility or cleanup finding
+description: Share a tested result from your Android phone.
+title: "[Device] Manufacturer and model"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If you have a tested change or a compatibility note ready to share, [open a pull request](https://github.com/shiv-eshwar/cleanyourandroid/blob/main/CONTRIBUTING.md). Keep device IDs, network details, personal files, and pairing codes out of the report.
+  - type: input
+    id: device
+    attributes:
+      label: Manufacturer, model, Android version, and build
+      placeholder: Nothing Phone (2a) A142, Android 17, C5.0-…
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: ADB connection
+      options:
+        - USB
+        - Wireless debugging
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: What you found
+      description: Describe the behavior, package, or workflow. Include the exact package name if it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and verification
+      description: Describe the commands, test conditions, before-and-after observations, and any restore check. Share only a sanitized excerpt.
+    validations:
+      required: true

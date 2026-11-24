@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible issue with the CLI, skill, or MCP integration.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share selected output with personal details removed. For a vulnerability or unintended data exposure, use [private reporting](https://github.com/shiv-eshwar/cleanyourandroid/security/advisories/new).
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the CleanYourAndroid release or commit, your computer OS, Python and ADB versions, and the phone model and Android build if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command or agent setup and any relevant connection state.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Add a short sanitized error excerpt if available.
+    validations:
+      required: true

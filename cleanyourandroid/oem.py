@@ -36,7 +36,8 @@ RULES = {
 
 OEM_AD_CONTROLS = {
     "oppo": [
-        "In App Market, open the account/profile settings and look for recommendations or personalized recommendations.",
+        "In App Market, check My Account → Settings → Privacy Settings → Ads & recommendations, if available.",
+        "Look for App Content in Security & Privacy and personalized recommendations in the Phone Manager settings.",
         "Check the Browser, Theme Store, and lock-screen content settings for separate recommendations and notifications.",
     ],
     "vivo": [
@@ -112,10 +113,13 @@ def verified_candidates(device, *, strict=False):
         if not code_paths or not any(marker in dump or marker in paths for marker in rule.markers):
             continue
         # Per-user removal can reliably retain the same version only for an APK on the system image.
-        remove_allowed = all(path.startswith(IMAGE_PREFIXES) for path in code_paths) and "UPDATED_SYSTEM_APP" not in dump
+        base_image = all(path.startswith(IMAGE_PREFIXES) for path in code_paths) and "UPDATED_SYSTEM_APP" not in dump
+        store_fallback = rule.manufacturer == "nothing" or "com.android.vending" in enabled
         rows.append({
             "package": name, "label": rule.label, "reason": rule.purpose, "impact": rule.impact,
-            "disable_allowed": name in enabled, "remove_for_primary_user_allowed": remove_allowed,
+            "disable_allowed": name in enabled and store_fallback,
+            "remove_for_primary_user_allowed": base_image and store_fallback,
+            "blocked_reason": None if store_fallback else "Google Play Store was not found enabled. Review OEM store recommendations in the phone's settings.",
         })
     return rows
 

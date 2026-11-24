@@ -19,6 +19,7 @@ class Phone:
         self.home = "com.example.launcher/.Home"
         self.shared_uid = False
         self.system = True
+        self.play_store = True
         self.role_holder = None
         self.settings = {dns.MODE: "opportunistic"}
         self.fail_after_write = None
@@ -62,13 +63,16 @@ class Phone:
         if words[:2] == ("pm", "path"):
             return f"package:{self.code_path}"
         if words[:3] == ("pm", "list", "packages"):
-            if (not self.installed or ("-e" in words and self.enabled == 3)
-                    or ("-s" in words and not self.system)):
-                return ""
+            rows = []
+            if self.installed and not ("-e" in words and self.enabled == 3) and not ("-s" in words and not self.system):
+                rows.append((self.package, 10124))
+            if self.play_store:
+                rows.append(("com.android.vending", 10125))
+            if self.shared_uid:
+                rows.append(("com.example.other", 10124))
             if "-U" in words:
-                others = "\npackage:com.example.other uid:10124" if self.shared_uid else ""
-                return f"package:{self.package} uid:10124{others}"
-            return f"package:{self.package}"
+                return "\n".join(f"package:{app} uid:{uid}" for app, uid in rows)
+            return "\n".join(f"package:{app}" for app, _ in rows)
         if words[:2] == ("pm", "uninstall"):
             self.mutations.append(words)
             self.installed = False
@@ -118,6 +122,18 @@ class OEMTests(unittest.TestCase):
                 with self.assertRaises(adb.DeviceError):
                     plan.create_plan(phone, [dict(kind="disable", target=phone.package, value=3)], self.source)
                 self.assertFalse(phone.mutations)
+
+    def test_keeps_only_store_available(self):
+        phone = Phone()
+        phone.play_store = False
+        candidate, = oem.verified_candidates(phone)
+        self.assertFalse(candidate["disable_allowed"])
+        self.assertFalse(candidate["remove_for_primary_user_allowed"])
+        self.assertIn("Google Play Store", candidate["blocked_reason"])
+        for kind, value in (("disable", 3), ("remove", -1)):
+            with self.assertRaises(adb.DeviceError):
+                plan.create_plan(phone, [dict(kind=kind, target=phone.package, value=value)], self.source)
+        self.assertFalse(phone.mutations)
 
     def test_updated_preinstall_can_be_disabled_but_not_removed(self):
         phone = Phone()

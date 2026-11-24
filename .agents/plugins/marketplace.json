@@ -1,0 +1,12 @@
+{
+  "name": "cleanyourandroid",
+  "interface": { "displayName": "CleanYourAndroid" },
+  "plugins": [
+    {
+      "name": "cleanyourandroid",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

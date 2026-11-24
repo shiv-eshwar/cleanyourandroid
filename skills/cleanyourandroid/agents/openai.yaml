@@ -1,0 +1,4 @@
+interface:
+  display_name: "CleanYourAndroid"
+  short_description: "Audit and safely clean an Android phone over ADB"
+  default_prompt: "Use $cleanyourandroid to audit my Android phone and propose a cleanup plan."

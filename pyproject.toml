@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cleanyourandroid"
+version = "0.1.0"
+description = "Audit and tune an Android phone locally over ADB"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.12,<2"]
+
+[project.scripts]
+cleanyourandroid = "cleanyourandroid.cli:main"
+cleanyourandroid-mcp = "cleanyourandroid.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["cleanyourandroid*"]
+
+[project.urls]
+Repository = "https://github.com/shiv-eshwar/cleanyourandroid"

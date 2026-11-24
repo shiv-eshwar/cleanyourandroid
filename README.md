@@ -1,6 +1,20 @@
 # CleanYourAndroid
 
-Find what is making your Android phone slow and review changes before applying them. CleanYourAndroid runs locally over an authorized ADB connection and requires no root.
+**Find what is slowing down your Android phone. Fix what the evidence supports.**
+
+CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain, app bloat, and storage use. It keeps your existing launcher, wallpaper, and interface. The core CLI needs Python and Android Platform-Tools. Root access and a bootloader unlock are unnecessary.
+
+| Start with | What you get |
+| --- | --- |
+| [Quick start](#quick-start) | Run your first audit over USB or Wi-Fi |
+| [Diagnose lag and Battery Saver](docs/performance.md) | Measure what changes when your phone stutters |
+| [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
+| [Clean up large files](#clean-up-large-files) | Verify a backup and a retained copy before removing a duplicate |
+| [Use a coding assistant](#use-a-coding-assistant) | Install a Codex plugin, a standalone skill, or a local MCP server |
+
+## Quick start
+
+Install Python 3.10+ and [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). Put Platform-Tools on your PATH or point `CLEANYOURANDROID_ADB` at the full path to `adb`. The CLI also checks common SDK folders.
 
 ```sh
 git clone https://github.com/shiv-eshwar/cleanyourandroid.git
@@ -9,6 +23,136 @@ python3 -m cleanyourandroid devices
 python3 -m cleanyourandroid audit
 ```
 
-Requires Python 3.10+ and [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). The CLI includes performance diagnostics, an explicit tuning plan with rollback, and verified backups for supported file removals.
+On Windows, use `py -3.12 -m cleanyourandroid` with Python 3.12 installed. To install a standalone command with [uv](https://docs.astral.sh/uv/):
 
-Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv).
+```sh
+uv tool install --python 3.12 "git+https://github.com/shiv-eshwar/cleanyourandroid.git"
+cleanyourandroid devices
+```
+
+Use either connection below. If two transports show up for the same phone, pass the intended serial from `devices` to every device command.
+
+```sh
+cleanyourandroid audit --serial YOUR_SERIAL
+cleanyourandroid diagnose --serial YOUR_SERIAL
+```
+
+### USB debugging
+
+1. On the phone, open **Settings → About phone** and tap **Build number** seven times. It may be under **Software information**. Confirm your screen lock if prompted.
+2. Open **Developer options** and enable **USB debugging**.
+3. Attach a USB data cable, unlock the phone, and tap **Allow** in the debugging prompt for this computer.
+4. Run `adb devices -l` and look for the state `device`. If it says `unauthorized`, accept the prompt on the phone. If the phone is missing, try a data-capable cable or another port. Windows may need the manufacturer's USB driver. Linux may need [ADB device permissions](https://developer.android.com/studio/run/device#setting-up).
+
+### Wireless debugging
+
+Use Android 11 or later, a recent `adb`, and a trusted Wi-Fi network shared by the phone and computer.
+
+1. Open **Developer options → Wireless debugging → Pair device with pairing code**. Keep the pairing dialog visible.
+2. Pair using the address and port in the **pairing dialog**. Enter the six-digit code at the terminal prompt.
+3. Return to the main **Wireless debugging** screen. Connect using the address and port shown on **that page**.
+
+```sh
+adb pair 192.168.1.50:37123
+adb connect 192.168.1.50:43657
+adb devices -l
+```
+
+The two ports serve different purposes and can change. Confirm both on the phone. Reopen the pairing dialog for a fresh code if the old one expires. Run `adb mdns services` if automatic discovery fails. Android Studio also offers QR pairing under **Device Manager → Pair Devices Using Wi-Fi**. Use USB if the network blocks peer connections. Turn off debugging on the phone when you finish.
+
+## Review and apply changes
+
+Start with `audit`. It reports observed CPU activity, thermal state, battery policy, graphics information available on the build, free space, cached app sizes, and known optional packages. A single snapshot cannot establish which process caused a stall. Use the [performance guide](docs/performance.md) to compare repeatable workloads.
+
+Choose an action that addresses a measured issue. For example, if Battery Saver turns on automatically and app launches feel slower:
+
+```sh
+mkdir -p .cyandroid
+cleanyourandroid plan --disable-auto-saver --out .cyandroid/plan.json
+```
+
+Read the plan, including the observed values and operations. Copy its `approval_sha256` after reviewing it.
+
+```sh
+cleanyourandroid apply .cyandroid/plan.json --approve APPROVAL_SHA256 --journal .cyandroid/rollback.json
+cleanyourandroid diagnose
+```
+
+| Plan option | Effect |
+| --- | --- |
+| `--disable-auto-saver` | Turn off the percentage-based Battery Saver trigger. Manual Battery Saver remains available. This can shorten the last stretch of battery runtime. |
+| `--disable-always-on-mobile-data` | Allow the extra cellular data session to close while Wi-Fi is connected. Handoff may take longer. |
+| `--disable-aura` | Disable the verified preloaded Aura recommendation component on eligible Nothing builds. App data is retained. |
+| `--clear-cache PACKAGE` | Clear only the cache for a listed app when Android supports the command. Use App info → Storage and cache → **Clear cache** if the result is unconfirmed. |
+
+To undo the reversible settings and package changes:
+
+```sh
+cleanyourandroid restore .cyandroid/rollback.json
+```
+
+A cache clear cannot be reversed. After firmware updates, run a fresh audit and review any new plan.
+
+## Clean up large files
+
+```sh
+cleanyourandroid files --min-mib 75
+cleanyourandroid files --min-mib 25 --duplicates --out .cyandroid/large-files.json
+```
+
+The scan covers Downloads, Camera, and the WhatsApp Sent documents folder in the primary profile. A matching SHA-256 establishes that two copies have identical contents. It does not establish that the chat can still open an attachment after its copy is removed.
+
+Backup requires exact approved paths. This example backs up an installer without changing the phone:
+
+```sh
+cleanyourandroid backup-files --out .cyandroid/backup \
+  --apk "/storage/emulated/0/Download/old-installer.apk"
+```
+
+For a verified duplicate, use `--duplicate "SENT_COPY" "RETAINED_CAMERA_OR_QUICK_SHARE_COPY"`. A plan can include multiple paths. Inspect `files.json`, then use the printed approval digest:
+
+```sh
+cleanyourandroid remove-files .cyandroid/backup/files.json --approve APPROVAL_SHA256
+cleanyourandroid restore-files .cyandroid/backup/files.json
+```
+
+The restore command is optional and skips identical existing files. It refuses to overwrite different contents. It can put bytes back on the phone, but it cannot promise that WhatsApp restores its own index. [Backup and interruption details](docs/safety.md).
+
+## Use a coding assistant
+
+### Codex plugin
+
+Install the CLI first and make sure the local Codex session can see it and ADB.
+
+```sh
+codex plugin marketplace add shiv-eshwar/cleanyourandroid
+codex plugin add cleanyourandroid@cleanyourandroid
+```
+
+Invoke `$cleanyourandroid` in a new session. You can also register an existing checkout using `codex plugin marketplace add /absolute/path/to/cleanyourandroid`.
+
+### Standalone skill
+
+Copy [the skill folder](skills/cleanyourandroid) into your agent's skills directory. For Codex, either copy it to `~/.agents/skills/` or include it in the repository's `.agents/skills/` directory. You can also paste [PROMPT.md](PROMPT.md) into a local coding assistant with the checkout open.
+
+### Local MCP server
+
+The MCP server exposes device discovery, audits, performance readings, and frame counters. It uses stdio on the computer attached to the phone. Cleanup actions are handled by the local CLI with approval.
+
+```sh
+codex mcp add cleanyourandroid -- uvx --python 3.12 \
+  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git" \
+  cleanyourandroid-mcp
+```
+
+For other stdio clients, install the checkout with `python -m pip install ".[mcp]"` and configure the server command with the absolute path to the installed `cleanyourandroid-mcp` executable. If your client has a restricted PATH, set `CLEANYOURANDROID_ADB` to the absolute Platform-Tools path in the server environment.
+
+## Compatibility and privacy
+
+The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**, using USB. Output and available commands vary by Android release and OEM. The initial debloat rule is deliberately limited to a component verified on Nothing. Private Space and cloned app profiles are outside the cleanup scope.
+
+Diagnostics, file names, approvals, and backups stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers, or filenames.
+
+For development, run `python -m unittest discover -s tests -v`. Share reproducible reports using the manufacturer, model, Android version, and build. Keep device identifiers, personal files, and raw logs out of issues and pull requests.
+
+Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv) and its inspect, review, and restore workflow. CleanYourAndroid is an independently implemented, performance-focused phone project. [MIT License](LICENSE).

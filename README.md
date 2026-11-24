@@ -4,6 +4,10 @@
 
 CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain, app bloat, and storage use. It keeps your existing launcher, wallpaper, and interface. The core CLI needs Python and Android Platform-Tools. Root access and a bootloader unlock are unnecessary.
 
+![Battery Saver settings on a Nothing Phone (2a) beside live CleanYourAndroid output showing Android 17, Battery Saver off, and 90 fps rendering](docs/images/live-diagnostic.png)
+
+*Real USB session on a Nothing Phone (2a). The preview shows selected fields from `diagnose` alongside the phone's Battery Saver screen.*
+
 | Start with | What you get |
 | --- | --- |
 | [Quick start](#quick-start) | Run your first audit over USB or Wi-Fi |

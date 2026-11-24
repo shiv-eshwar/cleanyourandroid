@@ -9,7 +9,8 @@ import re
 import tempfile
 
 from .adb import DeviceError
-from .audit import AURA, CACHE_TARGETS, SETTINGS, packages, recommendations
+from .audit import CACHE_TARGETS, SETTINGS
+from . import dns, oem
 
 
 def json_bytes(value):
@@ -72,20 +73,32 @@ def write_journal(path, data):
             temporary.unlink(missing_ok=True)
 
 
-def package_state(device, package):
-    dump = device.shell("dumpsys", "package", package)
-    match = re.search(r"^[ \t]*User 0: [^\n]*installed=true[^\n]*\benabled=([0-4])\b", dump, re.M)
-    if not match:
-        raise DeviceError(f"Cannot establish the primary user's state for {package}.")
-    return int(match[1])
+APP_ACTIONS = {"disable": 3, "remove": -1}
+RESTORABLE_APP_STATES = {0: "default-state", 1: "enable", 3: "disable-user"}
 
 
 def before_value(device, kind, target):
     if kind == "setting":
         return device.shell("settings", "get", "global", target)
-    if kind == "disable":
-        return package_state(device, target)
+    if kind in APP_ACTIONS:
+        return oem.package_state(device, target)
+    if kind == "dns":
+        return dns.read(device)
     return None
+
+
+def expected_value(kind, value):
+    return dns.desired(value) if kind == "dns" else value
+
+
+def verify_prior(op, before):
+    kind = op["kind"]
+    if kind in APP_ACTIONS and (type(before) is not int or before not in RESTORABLE_APP_STATES):
+        raise DeviceError("Unexpected saved app state.")
+    if kind == "setting" and (not isinstance(before, str) or not re.fullmatch(r"null|\d{1,3}", before)):
+        raise DeviceError("Unexpected saved setting.")
+    if kind == "dns":
+        dns.validate_state(before)
 
 
 def check_operations(operations):
@@ -100,7 +113,9 @@ def check_operations(operations):
             raise DeviceError("Invalid operation target.")
         if kind == "setting" and target in SETTINGS and value == "0":
             pass
-        elif kind == "disable" and target == AURA and type(value) is int and value == 3:
+        elif kind in APP_ACTIONS and target in oem.RULES and type(value) is int and APP_ACTIONS[kind] == value:
+            pass
+        elif kind == "dns" and target == "private_dns" and dns.hostname(value) == value:
             pass
         elif kind == "cache" and target in CACHE_TARGETS and value is None:
             pass
@@ -122,6 +137,15 @@ def create_plan(device, operations, path):
     verify_plan(device, payload, payload["device_id"])
     payload["observed"] = {op["target"]: before_value(device, op["kind"], op["target"])
                            for op in operations if op["kind"] != "cache"}
+    for op in operations:
+        verify_prior(op, payload["observed"].get(op["target"]))
+    payload["review_notes"] = {
+        op["target"]: (
+            oem.RULES[op["target"]].impact if op["kind"] in APP_ACTIONS
+            else "The selected DNS provider can see DNS queries. An unavailable host can interrupt connectivity."
+        )
+        for op in operations if op["kind"] in APP_ACTIONS or op["kind"] == "dns"
+    }
     create_json(path, payload)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -132,14 +156,24 @@ def verify_plan(device, plan, identity):
     if not plan.get("build") or plan["build"] != device.prop("ro.build.fingerprint"):
         raise DeviceError("The build changed. Audit the phone and create a new plan.")
     check_operations(plan.get("operations"))
-    installed = packages(device)
+    installed = oem.packages(device)
     for operation in plan["operations"]:
         kind, target = operation["kind"], operation["target"]
-        if kind == "disable" and not recommendations(device):
-            raise DeviceError("An enabled, matching Nothing Aura component was not verified.")
+        if kind in APP_ACTIONS:
+            verify_package_action(device, kind, target)
+        if kind == "dns":
+            sdk = device.prop("ro.build.version.sdk")
+            if not sdk.isdecimal() or int(sdk) < 28:
+                raise DeviceError("Private DNS requires Android 9 or later.")
         if kind == "cache" and (target not in installed or
                                "--cache-only" not in device.shell("pm", "help")):
             raise DeviceError(f"Use App info → Storage and cache → Clear cache for {target}.")
+
+
+def verify_package_action(device, kind, target):
+    key = "disable_allowed" if kind == "disable" else "remove_for_primary_user_allowed"
+    if not any(row["package"] == target and row[key] for row in oem.verified_candidates(device, strict=True)):
+        raise DeviceError(f"No eligible {kind} action for {target} on this phone and build.")
 
 
 def apply(device, source, approval, journal_path):
@@ -153,22 +187,31 @@ def apply(device, source, approval, journal_path):
         observed = {op["target"]: op["before"] for op in entries if op["kind"] != "cache"}
         if observed != plan.get("observed"):
             raise DeviceError("The current settings differ from the reviewed plan. Create a new plan.")
-        journal = {"version": 1, "device_id": identity, "entries": entries}
+        journal = {"version": 1, "device_id": identity, "build": plan["build"], "entries": entries}
         create_json(journal_path, journal)
         for op in entries:
             kind, target, desired = (op[key] for key in ("kind", "target", "value"))
             if kind != "cache" and before_value(device, kind, target) != op["before"]:
                 raise DeviceError(f"{target} changed since preflight. The journal records earlier actions.")
-            if kind != "cache" and op["before"] == desired:
+            expected = expected_value(kind, desired)
+            if kind != "cache" and op["before"] == expected:
                 op["state"] = "unchanged"
                 write_journal(journal_path, journal)
                 continue
             op["state"] = "started"
             write_journal(journal_path, journal)
             if kind == "setting":
-                device.shell("settings", "put", "global", target, desired)
-            elif kind == "disable":
-                device.shell("pm", "disable-user", "--user", "0", target)
+                dns.put_setting(device, target, desired)
+            elif kind == "dns":
+                dns.apply(device, desired)
+            elif kind in APP_ACTIONS:
+                verify_package_action(device, kind, target)
+                if kind == "disable":
+                    device.shell("pm", "disable-user", "--user", "0", target)
+                else:
+                    response = device.shell("pm", "uninstall", "-k", "--user", "0", target)
+                    if response != "Success":
+                        raise DeviceError(f"Android did not confirm per-user removal of {target}.")
             else:
                 try:
                     response = device.shell("pm", "clear", "--user", "0", "--cache-only", target, timeout=12)
@@ -176,7 +219,7 @@ def apply(device, source, approval, journal_path):
                     raise DeviceError(f"Cache result is unconfirmed for {target}. Check Storage and cache on the phone. Prior changes are in the journal.") from exc
                 if response != "Success":
                     raise DeviceError(f"Cache clear failed for {target}. Use Storage and cache on the phone.")
-            if kind != "cache" and before_value(device, kind, target) != desired:
+            if kind != "cache" and before_value(device, kind, target) != expected:
                 raise DeviceError(f"Android did not confirm {target}. Check the journal before retrying.")
             op["state"] = "applied"
             write_journal(journal_path, journal)
@@ -193,30 +236,46 @@ def restore(device, journal_path):
             raise DeviceError("Invalid journal entries.")
         check_operations([{key: op.get(key) for key in ("kind", "target", "value")} for op in entries])
         for op in entries:
-            if op.get("state") not in {"pending", "started", "applied", "unchanged", "restored"}:
+            if op.get("state") not in {"pending", "started", "applied", "unchanged", "restoring", "restored"}:
                 raise DeviceError("Invalid journal state.")
-            before = op.get("before")
-            if op["kind"] == "disable" and (type(before) is not int or before not in {0, 1}):
-                raise DeviceError("Unexpected saved app state.")
-            if op["kind"] == "setting" and (not isinstance(before, str) or not re.fullmatch(r"null|\d{1,3}", before)):
-                raise DeviceError("Unexpected saved setting.")
+            verify_prior(op, op.get("before"))
+            if op["kind"] in APP_ACTIONS and oem.RULES[op["target"]].manufacturer != oem.manufacturer(device):
+                raise DeviceError("The saved app rule does not match this manufacturer.")
+        errors = []
         for op in reversed(entries):
-            kind, target = op["kind"], op["target"]
-            if kind == "cache" or op["state"] not in {"started", "applied"}:
+            if op["kind"] == "cache" or op["state"] not in {"started", "applied", "restoring"}:
                 continue
-            before = op["before"]
-            current = before_value(device, kind, target)
-            if current == op["value"] and current != before:
-                if kind == "setting":
-                    if before == "null":
-                        device.shell("settings", "delete", "global", target)
-                    else:
-                        device.shell("settings", "put", "global", target, before)
-                else:
-                    command = "default-state" if before == 0 else "enable"
-                    device.shell("pm", command, "--user", "0", target)
-            if before_value(device, kind, target) != before:
-                raise DeviceError(f"{target} changed independently. Resolve it on the phone before retrying.")
-            op["state"] = "restored"
-            write_journal(journal_path, journal)
+            try:
+                restore_one(device, journal_path, journal, op)
+            except DeviceError as exc:
+                errors.append(f'{op["target"]}: {exc}')
+        if errors:
+            raise DeviceError("Some actions could not be restored. Other eligible actions were attempted.\n"
+                              + "\n".join(errors))
     return entries
+
+
+def restore_one(device, journal_path, journal, op):
+    kind, target, value = (op[key] for key in ("kind", "target", "value"))
+    before = op["before"]
+    current = before_value(device, kind, target)
+    if kind == "remove" and current != before:
+        if journal.get("build") != device.prop("ro.build.fingerprint"):
+            raise DeviceError("The build changed after app removal. Check the OEM store or app settings before restoring.")
+        if current == value or (op["state"] == "restoring" and current in RESTORABLE_APP_STATES):
+            op["state"] = "restoring"
+            write_journal(journal_path, journal)
+            if current == value:
+                device.shell("pm", "install-existing", "--user", "0", target)
+            device.shell("pm", RESTORABLE_APP_STATES[before], "--user", "0", target)
+    elif kind == "dns":
+        dns.restore(device, before, value)
+    elif current == value and current != before:
+        if kind == "setting":
+            dns.put_setting(device, target, before)
+        elif kind == "disable":
+            device.shell("pm", RESTORABLE_APP_STATES[before], "--user", "0", target)
+    if before_value(device, kind, target) != before:
+        raise DeviceError(f"{target} changed independently. Resolve it on the phone before retrying.")
+    op["state"] = "restored"
+    write_journal(journal_path, journal)

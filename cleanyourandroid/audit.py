@@ -6,6 +6,8 @@ import json
 import re
 
 from .adb import DeviceError, package_name
+from . import dns, oem
+from .oem import packages
 
 SAVER = "low_power_trigger_level"
 CELLULAR = "mobile_data_always_on"
@@ -13,18 +15,12 @@ SETTINGS = {
     SAVER: "Automatic Battery Saver percentage. A value of 0 disables the percentage trigger.",
     CELLULAR: "Keep a cellular data session active on Wi-Fi. A value of 0 allows it to close.",
 }
-AURA = "com.aura.oobe.solutions"
 CACHE_TARGETS = {
     "com.android.vending": "Google Play Store",
     "com.android.chrome": "Chrome",
     "com.google.android.apps.photos": "Google Photos",
     "com.nothing.gallery": "Nothing Gallery",
 }
-
-
-def packages(device, *options):
-    data = device.shell("pm", "list", "packages", "--user", "0", *options)
-    return {line.removeprefix("package:") for line in data.splitlines() if line.startswith("package:")}
 
 
 def disk_stats(raw):
@@ -131,21 +127,6 @@ def diagnostic_report(device):
     }
 
 
-def recommendations(device):
-    if device.prop("ro.product.manufacturer").lower() != "nothing" or AURA not in packages(device, "-s"):
-        return []
-    if AURA not in packages(device, "-e"):
-        return []
-    # Confirm that this OEM's package actually contains the app-delivery component.
-    if "com.ironsource.aura." not in device.shell("dumpsys", "package", AURA):
-        return []
-    home = device.shell("cmd", "package", "resolve-activity", "--brief", "--user", "0",
-                        "-a", "android.intent.action.MAIN", "-c", "android.intent.category.HOME")
-    if not re.search(r"(?m)^[A-Za-z][\w.]+/[A-Za-z.][\w.$]*$", home) or f"{AURA}/" in home:
-        return []
-    return [dict(package=AURA, reason="Preloaded Aura app recommendations. Disabling retains app data.")]
-
-
 def audit(device):
     disabled = packages(device, "-d")
     system = packages(device, "-s")
@@ -160,7 +141,7 @@ def audit(device):
             for row in stats if row["package"] in system | user
         ][:15],
         "cache_note": "Android's cached estimates. Data bytes include cache. Profile attribution can vary by build.",
-        "disable_candidates": recommendations(device),
+        "disable_candidates": [row for row in oem.verified_candidates(device) if row["disable_allowed"]],
     }
 
 
@@ -206,3 +187,14 @@ def standby_delta(before, after):
     wakes = delta["wlan_wake_count"]
     return {**delta, "awake_percent": round(100 * awake / interval, 2) if awake is not None else None,
             "wlan_wakes_per_hour": round(3_600_000 * wakes / interval, 2) if wakes is not None else None}
+
+
+
+def ads_report(device):
+    return {
+        "model": device.prop("ro.product.model"),
+        "build": device.prop("ro.build.display.id"),
+        **oem.report(device),
+        "private_dns": dns.read(device),
+        "private_dns_note": "Choose a DNS-over-TLS provider you trust. DNS filtering cannot block every ad.",
+    }

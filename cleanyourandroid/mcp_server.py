@@ -32,6 +32,14 @@ def make_server():
         return reporting.diagnostic_report(Device(serial))
 
     @server.tool(annotations=readonly)
+    def audit_ads_and_preinstalls(serial: str) -> dict:
+        """Inspect OEM recommendation controls, verified preinstalled app candidates, and Private DNS."""
+        result = reporting.ads_report(Device(serial))
+        private_dns = result["private_dns"]
+        result["private_dns"] = {"mode": private_dns["mode"], "hostname_configured": private_dns["hostname"] != "null"}
+        return result
+
+    @server.tool(annotations=readonly)
     def standby_counters(serial: str) -> dict:
         """Read cumulative on-battery screen-off and Wi-Fi wakeup counters."""
         return reporting.standby(Device(serial))

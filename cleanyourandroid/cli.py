@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import audit as reporting
-from . import files, plan
+from . import dns, files, oem, plan
 from .adb import Device, DeviceError, devices
 
 
@@ -20,7 +20,7 @@ def parser():
         prog="cleanyourandroid", description="Audit and tune your Android phone over ADB.")
     commands = root.add_subparsers(dest="command", required=True)
     commands.add_parser("devices", help="List USB and wireless ADB transports")
-    for name in ("audit", "diagnose", "standby"):
+    for name in ("audit", "diagnose", "standby", "ads"):
         sub = commands.add_parser(name, help=f"Collect a read-only {name} report")
         target(sub)
         sub.add_argument("--out", type=Path, help="Save JSON to a new file")
@@ -40,7 +40,12 @@ def parser():
     sub = commands.add_parser("plan", help="Preview explicit package and performance changes")
     target(sub)
     sub.add_argument("--out", type=Path, required=True)
-    sub.add_argument("--disable-aura", action="store_true")
+    sub.add_argument("--disable-aura", action="store_true", help="Alias for --disable-package com.aura.oobe.solutions")
+    sub.add_argument("--disable-package", action="append", default=[], choices=oem.RULES,
+                     help="Disable one verified optional OEM package, preserving its data")
+    sub.add_argument("--remove-preinstall", action="append", default=[], choices=oem.RULES,
+                     help="Remove a verified base-image package for primary user 0 and keep its data")
+    sub.add_argument("--private-dns", metavar="HOSTNAME", help="Use an explicitly selected DNS-over-TLS resolver")
     sub.add_argument("--disable-auto-saver", action="store_true")
     sub.add_argument("--disable-always-on-mobile-data", action="store_true")
     sub.add_argument("--clear-cache", action="append", default=[], choices=reporting.CACHE_TARGETS)
@@ -69,8 +74,11 @@ def parser():
 
 def operations(args):
     rows = []
-    if args.disable_aura:
-        rows.append(dict(kind="disable", target=reporting.AURA, value=3))
+    disabled = [*args.disable_package, *([oem.AURA] if args.disable_aura else [])]
+    rows.extend(dict(kind="disable", target=package, value=3) for package in disabled)
+    rows.extend(dict(kind="remove", target=package, value=-1) for package in args.remove_preinstall)
+    if args.private_dns is not None:
+        rows.append(dict(kind="dns", target="private_dns", value=dns.hostname(args.private_dns)))
     if args.disable_auto_saver:
         rows.append(dict(kind="setting", target=reporting.SAVER, value="0"))
     if args.disable_always_on_mobile_data:
@@ -99,6 +107,8 @@ def execute(args):
     device = Device(args.serial)
     if command == "audit":
         return reporting.audit(device)
+    if command == "ads":
+        return reporting.ads_report(device)
     if command == "diagnose":
         return reporting.diagnostic_report(device)
     if command == "standby":
@@ -137,7 +147,7 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         result = execute(args)
-        if args.command in {"audit", "diagnose", "standby", "frames", "files"} and args.out:
+        if args.command in {"audit", "diagnose", "standby", "ads", "frames", "files"} and args.out:
             plan.create_json(args.out, result)
         sys.stdout.buffer.write(plan.json_bytes(result))
     except (DeviceError, OSError, ValueError, KeyError, TypeError) as exc:

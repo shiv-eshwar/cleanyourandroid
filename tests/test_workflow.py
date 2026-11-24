@@ -180,6 +180,21 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(adb.DeviceError):
             audit.frame_delta(before, dict(after, pid=2))
 
+    def test_standby_uses_time_and_awake_deltas_from_same_charge(self):
+        before = audit.standby_counters(
+            "  Time on battery screen off: 2m 5s 55ms (60%) realtime, 31s 23ms (20%) uptime\n"
+            "  Start clock time: 2026-01-01-11-11-11\n"
+            "  Screen off discharge: 5.0 mAh\n"
+            "  Wakeup reason 524 wlan0: 30s 133ms (4 times) realtime"
+        )
+        self.assertEqual(before["screen_off_ms"], 125055)
+        after = dict(before, screen_off_ms=425055, screen_off_awake_ms=61023, wlan_wake_count=9)
+        result = audit.standby_delta(before, after)
+        self.assertEqual(result["awake_percent"], 10)
+        self.assertEqual(result["wlan_wakes_per_hour"], 60)
+        with self.assertRaises(adb.DeviceError):
+            audit.standby_delta(before, dict(after, start_clock="different"))
+
     def test_unavailable_or_malformed_cached_disk_stats(self):
         self.assertEqual(audit.disk_stats("Package Names: null\nApp Sizes: []\nApp Data Sizes: []\nCache Sizes: []"), [])
         rows = audit.disk_stats('Package Names: ["com.example.app"]\nApp Sizes: [5]\nApp Data Sizes: [10]\nCache Sizes: [2]')

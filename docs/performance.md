@@ -34,3 +34,15 @@ Test two short runs on a cool phone, one with Battery Saver off and one with it 
 Some Android builds reduce the app-launch boost or request a lower render rate in Battery Saver. A 25% trigger shows when the policy changes. It does not establish that an app or that policy caused every stall. A test at 80% cannot confirm behavior at a real 4% charge. To investigate that complaint, capture a report during the actual symptom with the currently selected power mode.
 
 For standby drain, use comparable periods on battery power with the screen off. Wireless debugging traffic, cellular signal, app notifications, and media playback can change the result. Take readings before and after the interval to avoid polling a phone you expect to sleep. Preserve Android's battery history and thermal safeguards while investigating.
+
+### Measure screen-off standby
+
+```sh
+cleanyourandroid standby --out .cyandroid/idle-before.json
+# Disconnect USB power and leave the phone locked for the planned interval.
+# Reconnect the same USB transport after the interval.
+cleanyourandroid standby --out .cyandroid/idle-after.json
+cleanyourandroid compare-standby .cyandroid/idle-before.json .cyandroid/idle-after.json
+```
+
+Keep both samples in the same battery statistics window. The tool compares on-battery screen-off time, awake time, and Wi-Fi wakeup counts when the device reports them. Short intervals may produce too little discharge to measure reliably. An absent counter means Android did not report it.

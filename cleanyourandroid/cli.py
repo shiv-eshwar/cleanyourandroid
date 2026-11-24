@@ -20,7 +20,7 @@ def parser():
         prog="cleanyourandroid", description="Audit and tune your Android phone over ADB.")
     commands = root.add_subparsers(dest="command", required=True)
     commands.add_parser("devices", help="List USB and wireless ADB transports")
-    for name in ("audit", "diagnose"):
+    for name in ("audit", "diagnose", "standby"):
         sub = commands.add_parser(name, help=f"Collect a read-only {name} report")
         target(sub)
         sub.add_argument("--out", type=Path, help="Save JSON to a new file")
@@ -28,9 +28,10 @@ def parser():
     target(sub)
     sub.add_argument("package")
     sub.add_argument("--out", type=Path)
-    sub = commands.add_parser("compare-frames", help="Compare two snapshots of the same interaction window")
-    sub.add_argument("before", type=Path)
-    sub.add_argument("after", type=Path)
+    for name in ("compare-frames", "compare-standby"):
+        sub = commands.add_parser(name, help=f"Calculate the delta between two {name[8:]} snapshots")
+        sub.add_argument("before", type=Path)
+        sub.add_argument("after", type=Path)
     sub = commands.add_parser("files", help="Find large Downloads, Camera and WhatsApp Sent files")
     target(sub)
     sub.add_argument("--min-mib", type=int, default=75)
@@ -86,16 +87,25 @@ def execute(args):
     command = args.command
     if command == "devices":
         return devices()
-    if command == "compare-frames":
+    if command in {"compare-frames", "compare-standby"}:
         before, after = (read_json(path) for path in (args.before, args.after))
-        if before["package"] != after["package"] or before["connection"] != after["connection"]:
-            raise DeviceError("Snapshots must use the same app and ADB transport.")
+        if before["connection"] != after["connection"]:
+            raise DeviceError("Snapshots must use the same ADB serial.")
+        if command == "compare-standby":
+            return reporting.standby_delta(before["standby"], after["standby"])
+        if before["package"] != after["package"]:
+            raise DeviceError("Frame snapshots must use the same app.")
         return reporting.frame_delta(before["graphics"], after["graphics"])
     device = Device(args.serial)
     if command == "audit":
         return reporting.audit(device)
     if command == "diagnose":
         return reporting.diagnostic_report(device)
+    if command == "standby":
+        return {
+            "connection": hashlib.sha256(device.serial.encode()).hexdigest(),
+            "standby": reporting.standby(device),
+        }
     if command == "frames":
         return {
             "package": args.package,
@@ -127,7 +137,7 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         result = execute(args)
-        if args.command in {"audit", "diagnose", "frames", "files"} and args.out:
+        if args.command in {"audit", "diagnose", "standby", "frames", "files"} and args.out:
             plan.create_json(args.out, result)
         sys.stdout.buffer.write(plan.json_bytes(result))
     except (DeviceError, OSError, ValueError, KeyError, TypeError) as exc:

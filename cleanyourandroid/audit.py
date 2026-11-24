@@ -65,6 +65,8 @@ def core_snapshot(device):
     memory = re.search(r"^MemAvailable:\s+(\d+) kB", mem, re.M)
     render = re.search(r"mActiveRenderFrameRate=(\d+(?:\.\d+)?)", display)
     cap = re.search(r"PRIORITY_LOW_POWER_MODE_RENDER_RATE[^\n]*mMaxRefreshRate=(\d+(?:\.\d+)?)", display)
+    effective = power.partition("Policy 'effective'")[2].partition("Battery saver state machine:")[0]
+    launch = re.search(r"^\s*disable_launch_boost=(true|false)\s*$", effective, re.M)
     return {
         "battery_level": int(level[1]) if level else None,
         "battery_celsius": int(temp[1]) / 10 if temp else None,
@@ -75,6 +77,7 @@ def core_snapshot(device):
                                if "Battery Saver is currently:" in line), None),
         "low_power_render_limit_fps": float(cap[1]) if cap else None,
         "active_render_fps": float(render[1]) if render else None,
+        "launch_boost_disabled": launch[1] == "true" if launch else None,
         "settings": {key: device.shell("settings", "get", "global", key) for key in SETTINGS},
     }
 
@@ -159,3 +162,47 @@ def audit(device):
         "cache_note": "Android's cached estimates. Data bytes include cache. Profile attribution can vary by build.",
         "disable_candidates": recommendations(device),
     }
+
+
+def duration_ms(value):
+    units = {"d": 86_400_000, "h": 3_600_000, "m": 60_000, "s": 1_000, "ms": 1}
+    fields = re.findall(r"(\d+)(ms|[dhms])\b", value)
+    if fields and " ".join(number + unit for number, unit in fields) == " ".join(value.split()):
+        return sum(int(number) * units[unit] for number, unit in fields)
+    return None
+
+
+def standby_counters(raw):
+    start = re.search(r"^\s*Start clock time: (.+)$", raw, re.M)
+    off = re.search(r"^\s*Time on battery screen off: (.*?) \([^\n]+?\) realtime, "
+                    r"(.*?) \([^\n]+?\) uptime", raw, re.M)
+    charge = re.search(r"^\s*Screen off discharge: (\d+(?:\.\d+)?) mAh", raw, re.M)
+    wlan = re.search(r"^\s*Wakeup reason .*?\bwlan\d+: .*?\((\d+) times?\)", raw, re.M)
+    return {
+        "start_clock": start[1].strip() if start else None,
+        "screen_off_ms": duration_ms(off[1]) if off else None,
+        "screen_off_awake_ms": duration_ms(off[2]) if off else None,
+        "screen_off_discharge_mah": float(charge[1]) if charge else None,
+        "wlan_wake_count": int(wlan[1]) if wlan else None,
+    }
+
+
+def standby(device):
+    # --charged reads the current stats. --checkin can consume an archived report.
+    return standby_counters(device.shell("dumpsys", "batterystats", "--charged", timeout=45))
+
+
+def standby_delta(before, after):
+    if not before["start_clock"] or before["start_clock"] != after["start_clock"]:
+        raise DeviceError("The charge statistics window changed or is unavailable.")
+    keys = ("screen_off_ms", "screen_off_awake_ms", "screen_off_discharge_mah", "wlan_wake_count")
+    delta = {key: after[key] - before[key] if None not in (before[key], after[key]) else None for key in keys}
+    if any(value < 0 for value in delta.values() if value is not None):
+        raise DeviceError("Standby counters decreased. Capture both samples again.")
+    interval = delta["screen_off_ms"]
+    if not interval:
+        raise DeviceError("The phone accumulated no screen-off time on battery power.")
+    awake = delta["screen_off_awake_ms"]
+    wakes = delta["wlan_wake_count"]
+    return {**delta, "awake_percent": round(100 * awake / interval, 2) if awake is not None else None,
+            "wlan_wakes_per_hour": round(3_600_000 * wakes / interval, 2) if wakes is not None else None}

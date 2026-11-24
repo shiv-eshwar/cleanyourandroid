@@ -32,6 +32,11 @@ def make_server():
         return reporting.diagnostic_report(Device(serial))
 
     @server.tool(annotations=readonly)
+    def standby_counters(serial: str) -> dict:
+        """Read cumulative on-battery screen-off and Wi-Fi wakeup counters."""
+        return reporting.standby(Device(serial))
+
+    @server.tool(annotations=readonly)
     def app_frame_counters(serial: str, package: str) -> dict:
         """Read cumulative graphics counters for one app. Capture before and after an interaction."""
         return reporting.frame_stats(Device(serial), package)

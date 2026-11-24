@@ -37,7 +37,8 @@ def disk_stats(raw):
             except ValueError:
                 return []
     fields = ["Package Names", "App Sizes", "App Data Sizes", "Cache Sizes"]
-    if len(columns) != len(fields) or len({len(columns[field]) for field in fields}) != 1:
+    if (len(columns) != len(fields) or any(not isinstance(columns[field], list) for field in fields)
+            or len({len(columns[field]) for field in fields}) != 1):
         return []
     rows = [
         dict(package=name, app_bytes=code, data_bytes=data, cache_bytes=cache)
@@ -134,6 +135,10 @@ def recommendations(device):
         return []
     # Confirm that this OEM's package actually contains the app-delivery component.
     if "com.ironsource.aura." not in device.shell("dumpsys", "package", AURA):
+        return []
+    home = device.shell("cmd", "package", "resolve-activity", "--brief", "--user", "0",
+                        "-a", "android.intent.action.MAIN", "-c", "android.intent.category.HOME")
+    if not re.search(r"(?m)^[A-Za-z][\w.]+/[A-Za-z.][\w.$]*$", home) or f"{AURA}/" in home:
         return []
     return [dict(package=AURA, reason="Preloaded Aura app recommendations. Disabling retains app data.")]
 

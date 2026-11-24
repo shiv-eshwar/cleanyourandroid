@@ -52,29 +52,35 @@ def devices():
             continue
         fields = line.split()
         if len(fields) >= 2:
-            rows.append(dict(serial=fields[0], state=fields[1], model=next(
-                (field[6:] for field in fields[2:] if field.startswith("model:")), None)))
+            details = dict(field.split(":", 1) for field in fields[2:] if ":" in field)
+            rows.append(dict(serial=fields[0], state=fields[1], model=details.get("model"),
+                             transport_id=details.get("transport_id")))
     return rows
 
 
 class Device:
     def __init__(self, serial=None):
-        online = [row["serial"] for row in devices() if row["state"] == "device"]
+        online = {row["serial"]: row for row in devices() if row["state"] == "device"}
         if serial is None and len(online) == 1:
-            serial = online[0]
+            serial = next(iter(online))
         if not serial or serial not in online:
             raise DeviceError("Select one authorized online device with --serial from the devices command.")
         self.serial = serial
+        transport = online[serial]["transport_id"]
+        self.selector = ("-t", transport) if transport and transport.isdecimal() else ("-s", serial)
 
     def shell_bytes(self, *words, timeout=30):
         command = " ".join(shlex.quote(str(word)) for word in words)
-        return run_adb("-s", self.serial, "shell", "-T", command, timeout=timeout)
+        return run_adb(*self.selector, "shell", "-T", command, timeout=timeout)
 
     def shell(self, *words, timeout=30):
         return self.shell_bytes(*words, timeout=timeout).decode(errors="replace").strip()
 
     def pull(self, remote, target):
-        run_adb("-s", self.serial, "pull", "-a", str(remote), str(target), timeout=900)
+        run_adb(*self.selector, "pull", "-a", str(remote), str(target), timeout=900)
+
+    def push(self, source, target):
+        run_adb(*self.selector, "push", str(source), str(target), timeout=900)
 
     def prop(self, name):
         return self.shell("getprop", name)

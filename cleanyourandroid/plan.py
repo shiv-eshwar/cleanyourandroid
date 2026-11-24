@@ -119,6 +119,9 @@ def create_plan(device, operations, path):
         "version": 1, "device_id": device.identity(),
         "build": device.prop("ro.build.fingerprint"), "operations": operations,
     }
+    verify_plan(device, payload, payload["device_id"])
+    payload["observed"] = {op["target"]: before_value(device, op["kind"], op["target"])
+                           for op in operations if op["kind"] != "cache"}
     create_json(path, payload)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -147,6 +150,9 @@ def apply(device, source, approval, journal_path):
             {**op, "before": before_value(device, op["kind"], op["target"]), "state": "pending"}
             for op in plan["operations"]
         ]
+        observed = {op["target"]: op["before"] for op in entries if op["kind"] != "cache"}
+        if observed != plan.get("observed"):
+            raise DeviceError("The current settings differ from the reviewed plan. Create a new plan.")
         journal = {"version": 1, "device_id": identity, "entries": entries}
         create_json(journal_path, journal)
         for op in entries:

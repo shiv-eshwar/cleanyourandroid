@@ -4,6 +4,7 @@ from collections import defaultdict
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
+from secrets import token_hex
 import sys
 
 from .adb import DeviceError
@@ -43,11 +44,17 @@ def regular_stat(device, path):
     raw = device.shell("stat", "-c", "%f %s %d:%i %h", "--", path)
     try:
         mode, size, inode, links = raw.split()
-        if int(mode, 16) & 0o170000 != 0o100000 or int(links) != 1:
+        if int(mode, 16) & 0o170000 != 0o100000 or int(links) < 1:
             raise ValueError
         return int(size), inode
     except ValueError as exc:
-        raise DeviceError(f"Expected an ordinary file with one link: {path}") from exc
+        raise DeviceError(f"Expected an ordinary file: {path}") from exc
+
+
+def backup_path(source):
+    identifier = hashlib.sha256(str(source).encode()).hexdigest()
+    basename = re.sub(r"[^A-Za-z0-9._-]", "_", source.name.rstrip(" ."))[:100]
+    return PurePosixPath("payload") / f"{identifier}-{basename}"
 
 
 def remote_hash(device, path):
@@ -67,11 +74,13 @@ def local_hash(path):
 
 
 def matches(device, source, original=None):
+    if original is not None:
+        other_size, other_inode = regular_stat(device, original)
+        retained_hash = remote_hash(device, original)
     size, inode = regular_stat(device, source)
     digest = remote_hash(device, source)
     if original is not None:
-        other_size, other_inode = regular_stat(device, original)
-        if other_size != size or inode == other_inode or remote_hash(device, original) != digest:
+        if other_size != size or inode == other_inode or retained_hash != digest:
             raise DeviceError(f"No independent byte-for-byte retained copy for {source.name}.")
     return size, digest
 
@@ -129,7 +138,7 @@ def backup(device, folder, installers, duplicates):
         entries = []
         for (source, original), kind in zip(selections, kinds):
             size, digest = matches(device, source, original)
-            relative = source.relative_to(SHARED)
+            relative = backup_path(source)
             local = folder.joinpath(*relative.parts)
             local.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if local.exists():
@@ -161,7 +170,7 @@ def verified_entries(manifest_path, manifest, identity):
         if source in seen or classify(source, original) != entry.get("kind"):
             raise DeviceError("Unexpected file selection.")
         seen.add(source)
-        relative = source.relative_to(SHARED)
+        relative = backup_path(source)
         if str(relative) != entry.get("backup"):
             raise DeviceError("Backup path does not match the file selected.")
         local = root.joinpath(*relative.parts)
@@ -178,23 +187,85 @@ def exists(device, path):
                         "cleanyourandroid", path) == "yes"
 
 
+def quarantine_path(source, digest):
+    identifier = hashlib.sha256(str(source).encode()).hexdigest()
+    return source.parent / f".cleanyourandroid-{identifier}-{digest[:12]}.pending"
+
+
+def file_stamp(device, path):
+    return device.shell("stat", "-c", "%d:%i:%s:%y", "--", path)
+
+
+def remove_quarantined(device, entry, source, moved, original):
+    stamp = file_stamp(device, moved)
+    if matches(device, moved, original) != (entry["bytes"], entry["sha256"]):
+        raise DeviceError(f"The phone copy no longer matches the backup: {source.name}.")
+    device.shell("sh", "-c", 'if [ "$(stat -c "%d:%i:%s:%y" -- "$1")" = "$2" ]; then rm -- "$1"; else exit 1; fi',
+                 "cleanyourandroid", moved, stamp)
+    if exists(device, moved):
+        raise DeviceError(f"Android still shows the staged copy of {source.name}.")
+
+
 def remove(device, manifest_path, approval):
     manifest = load_approved(manifest_path, approval)
     with device_lock(device) as identity:
         verified = verified_entries(manifest_path, manifest, identity)
         pending = []
         for entry, source, original, _ in verified:
-            if exists(device, source):
-                if matches(device, source, original) != (entry["bytes"], entry["sha256"]):
-                    raise DeviceError(f"Phone copy changed since backup: {source.name}.")
-                pending.append((entry, source, original))
+            moved = quarantine_path(source, entry["sha256"])
+            present, staged = exists(device, source), exists(device, moved)
+            if present and staged:
+                raise DeviceError(f"Both {source} and {moved} exist. Inspect them before retrying.")
+            if present and matches(device, source, original) != (entry["bytes"], entry["sha256"]):
+                raise DeviceError(f"Phone copy changed since backup: {source.name}.")
+            if present or staged:
+                pending.append((entry, source, original, moved, staged))
+
         removed = []
-        for entry, source, original in pending:
-            if matches(device, source, original) != (entry["bytes"], entry["sha256"]):
-                raise DeviceError(f"Phone copy changed during cleanup: {source.name}.")
-            device.shell("rm", "--", source)
-            if exists(device, source):
-                raise DeviceError(f"Android still shows {source.name}.")
+        for entry, source, original, moved, staged in pending:
+            if not staged:
+                device.shell("mv", "-n", "--", source, moved)
+                if exists(device, source) or not exists(device, moved):
+                    raise DeviceError(f"Could not stage {source.name}. Check {source} and {moved}.")
+            try:
+                remove_quarantined(device, entry, source, moved, original)
+            except DeviceError as exc:
+                try:
+                    if exists(device, moved):
+                        device.shell("mv", "-n", "--", moved, source)
+                except DeviceError:
+                    pass
+                raise DeviceError(f"Stopped on {source.name}. Check {source} and {moved} before retrying. {exc}") from exc
             removed.append(str(source))
             print(f"Verified removal of {source.name}", file=sys.stderr)
     return {"removed": removed, "already_absent": len(verified) - len(pending)}
+
+
+def restore(device, manifest_path, manifest):
+    restored = []
+    already_present = []
+    with device_lock(device) as identity:
+        verified = verified_entries(manifest_path, manifest, identity)
+        for entry, destination, _, _ in verified:
+            if device.shell("realpath", "--", destination.parent) != str(destination.parent):
+                raise DeviceError(f"The original folder is unavailable for {destination.name}.")
+            if exists(device, destination) and matches(device, destination) != (entry["bytes"], entry["sha256"]):
+                raise DeviceError(f"A different file already exists at {destination}.")
+        for entry, destination, _, local in verified:
+            if exists(device, destination):
+                if matches(device, destination) != (entry["bytes"], entry["sha256"]):
+                    raise DeviceError(f"A different file appeared at {destination}.")
+                already_present.append(str(destination))
+                continue
+            temporary = destination.parent / f".cleanyourandroid-{token_hex(12)}.tmp"
+            try:
+                device.push(local, temporary)
+                if matches(device, temporary) != (entry["bytes"], entry["sha256"]):
+                    raise DeviceError(f"Restored bytes did not verify for {destination.name}.")
+                device.shell("mv", "-n", "--", temporary, destination)
+                if matches(device, destination) != (entry["bytes"], entry["sha256"]):
+                    raise DeviceError(f"Android did not confirm restoration of {destination.name}.")
+            finally:
+                device.shell("rm", "-f", "--", temporary)
+            restored.append(str(destination))
+    return {"restored": restored, "already_present": already_present}

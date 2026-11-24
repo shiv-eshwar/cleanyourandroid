@@ -1,6 +1,8 @@
 """Command-line entry point for Android audits and approved maintenance."""
 
 import argparse
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -58,6 +60,9 @@ def parser():
     target(sub)
     sub.add_argument("manifest", type=Path)
     sub.add_argument("--approve", required=True, help="SHA-256 shown when the backup was created")
+    sub = commands.add_parser("restore-files", help="Copy backed-up files to their original paths without overwriting")
+    target(sub)
+    sub.add_argument("manifest", type=Path)
     return root
 
 
@@ -74,7 +79,6 @@ def operations(args):
 
 
 def read_json(path):
-    import json
     return json.loads(path.read_bytes())
 
 
@@ -93,7 +97,6 @@ def execute(args):
     if command == "diagnose":
         return reporting.diagnostic_report(device)
     if command == "frames":
-        import hashlib
         return {
             "package": args.package,
             "connection": hashlib.sha256(device.serial.encode()).hexdigest(),
@@ -105,7 +108,7 @@ def execute(args):
     if command == "plan":
         rows = operations(args)
         approval = plan.create_plan(device, rows, args.out)
-        return {"plan": str(args.out), "approval_sha256": approval, "operations": rows}
+        return {"plan": str(args.out), "approval_sha256": approval, **read_json(args.out)}
     if command == "apply":
         return {"journal": str(args.journal), "operations": plan.apply(device, args.plan, args.approve, args.journal)}
     if command == "restore":
@@ -115,6 +118,8 @@ def execute(args):
         return {"manifest": str(manifest), "approval_sha256": approval}
     if command == "remove-files":
         return files.remove(device, args.manifest, args.approve)
+    if command == "restore-files":
+        return files.restore(device, args.manifest, read_json(args.manifest))
     raise DeviceError(f"Unknown command {command}")
 
 

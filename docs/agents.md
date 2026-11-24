@@ -53,8 +53,8 @@ Install [uv](https://docs.astral.sh/uv/) so your agent can run `uvx`. The exampl
 | Client | Setup |
 | --- | --- |
 | Claude Code | Run the [Claude MCP command](#claude-code-mcp). |
-| Cursor | Merge [the stdio example](../examples/agents/mcp-servers.json) into the `mcpServers` object in `.cursor/mcp.json` for the project or `~/.cursor/mcp.json` for your user. |
-| OpenCode | Merge [the OpenCode example](../examples/agents/opencode.json) into your `opencode.json` configuration. Add its entry to the existing `mcp` object. Run `opencode mcp list` to check the connection. |
+| Cursor | Merge [the stdio example](../examples/agents/mcp-servers.json) into `mcpServers` in `.cursor/mcp.json` or `~/.cursor/mcp.json`, then [approve the local server](#cursor-mcp). |
+| OpenCode | Follow the [OpenCode instructions](#opencode-mcp) for your installed major version. |
 | Codex | Run the [Codex MCP command](#codex-mcp). |
 | Other stdio clients | Use the same command and arguments from [the stdio example](../examples/agents/mcp-servers.json) in the client's local MCP configuration. |
 
@@ -70,6 +70,30 @@ claude mcp add --transport stdio --scope user cleanyourandroid -- uvx --python 3
   cleanyourandroid-mcp
 claude mcp list
 ```
+
+### Cursor MCP
+
+After adding the example, enable CleanYourAndroid in Cursor's MCP settings. In Cursor CLI, approve the new local server explicitly and check for its tools.
+
+```sh
+cursor-agent mcp enable cleanyourandroid
+cursor-agent mcp list-tools cleanyourandroid
+```
+
+### OpenCode MCP
+
+On **OpenCode 1.x**, merge [the OpenCode example](../examples/agents/opencode.json) into the existing `mcp` object in `opencode.json`. Verify it with `opencode mcp list`. This was tested with OpenCode 1.19.6.
+
+**OpenCode 2.x** uses `mcp.servers`. Its CLI can write the appropriate entry for the current project.
+
+```sh
+opencode mcp add cleanyourandroid -- uvx --python 3.12 \
+  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@v0.1.1" \
+  cleanyourandroid-mcp
+opencode mcp list
+```
+
+OpenCode 2.2.5 and 2.3.0 accepted the entry in testing, but their standalone MCP listing did not start the server. Use the portable skill with the local CLI on those builds, or use OpenCode 1.x for the verified MCP path.
 
 ### Codex MCP
 

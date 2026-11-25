@@ -93,4 +93,4 @@ A useful [device report](https://github.com/shiv-eshwar/cleanyourandroid/issues/
 
 [Contributing](CONTRIBUTING.md) · [Private security reporting](SECURITY.md) · [Coding agents and read-only MCP](docs/agents.md)
 
-Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv). Critical-package identifiers and protection patterns are adapted from [Shibakaa/cleanyourdroid](https://github.com/Shibakaa/cleanyourdroid/tree/6234b0b054d86f348b5fcb2f87fe4b04290e6f79) under [its MIT license](LICENSES/cleanyourdroid-MIT.txt). Its before/after reports inspired the offline comparison.
+

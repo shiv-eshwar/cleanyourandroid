@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import re
 
 from .adb import DeviceError
+from . import critical
 
 AURA = "com.aura.oobe.solutions"
 IMAGE_PREFIXES = ("/system/", "/system_ext/", "/product/", "/vendor/", "/odm/")
@@ -19,12 +20,17 @@ class Rule:
     markers: tuple[str, ...]
     is_store: bool = False
     ad_service: bool = False
+    needs_setup_complete: bool = False
 
 
 RULES = {
     AURA: Rule("nothing", "Aura recommendations", "Preloaded app recommendations and delivery.",
                "Stops this recommendation app. Setup and suggested installs can change.",
-               ("com.ironsource.aura.", "com.ironsource.appmanager.")),
+               ("com.ironsource.aura.", "com.ironsource.appmanager."), needs_setup_complete=True),
+    "com.aura.oobe.xiaomi": Rule(
+        "xiaomi", "Aura setup recommendations", "May offer sponsored app installs during or after setup.",
+        "Disabling can stop suggested installations. Leave enabled if you use the OEM's setup recommendations.",
+        ("com.ironsource.aura.", "com.ironsource.appmanager.", "/AuraOOBE/"), needs_setup_complete=True),
     "com.heytap.market": Rule(
         "oppo", "OPPO App Market", "OEM app store and recommendations.",
         "Use the in-app recommendation controls first if you rely on App Market or its updates.",
@@ -125,7 +131,7 @@ def protected_packages(device):
 
 def verified_candidates(device, *, strict=False):
     brand = manufacturer(device)
-    candidates = {name for name, rule in RULES.items() if applies_to(rule, brand)}
+    candidates = {name for name, rule in RULES.items() if applies_to(rule, brand) and not critical.protected(name)}
     present = candidates & packages(device, "-s")
     if not present:
         return []
@@ -150,6 +156,10 @@ def verified_candidates(device, *, strict=False):
         if name in protected or not 10000 <= uid < 20000 or counts[uid] != 1:
             continue
         rule = RULES[name]
+        if rule.needs_setup_complete and (
+                device.shell("settings", "get", "global", "device_provisioned") != "1" or
+                device.shell("settings", "--user", "0", "get", "secure", "user_setup_complete") != "1"):
+            continue
         dump = device.shell("dumpsys", "package", name)
         paths = device.shell("pm", "path", "--user", "0", name)
         if re.search(r"(?im)^\s*sharedUser(?:Id)?\s*=\s*(?!null\s*$|0\s*$)\S", dump):
@@ -176,7 +186,7 @@ def review_apps(device, known):
     except DeviceError:
         return None
     launchable = set(re.findall(r"(?m)^([A-Za-z][\w.]+)/[A-Za-z.][\w.$]*$", output))
-    return sorted(launchable & packages(device, "-s") - known)
+    return sorted(name for name in (launchable & packages(device, "-s")) - known if not critical.protected(name))
 
 
 def report(device):
@@ -187,7 +197,7 @@ def report(device):
         "candidates": verified,
         "package_checks_note": note,
         "declared_preinstalled_apps_for_manual_review": review_apps(device, {row["package"] for row in verified}),
-        "manual_review_note": "Inventory only. System apps can be essential or provide updates.",
+        "manual_review_note": "Inventory only. Known critical packages are excluded; other system apps may still be essential.",
         "recommendation_controls_to_check": OEM_AD_CONTROLS.get(brand, []),
     }
 

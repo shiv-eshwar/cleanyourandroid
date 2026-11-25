@@ -59,3 +59,11 @@ Use a USB connection so you can restore even if the phone loses Internet access.
 DNS filtering works on domains. Ads delivered through the same domains as the content, many video ads, OEM interface suggestions, and apps that bypass Android DNS may still appear. Turn off advertising personalization separately if you want fewer personalized recommendations. [Android ads privacy controls](https://support.google.com/android/answer/13720755?hl=en)
 
 Disabling unused components and recommendations can reduce background activity on some phones. Use the [performance guide](performance.md) to measure the effect. The changes run on the original firmware with the existing launcher and OEM update system.
+
+## Critical components and setup recommendations
+
+The package checks use a second list of packages and patterns that must stay available, including core Android UI, phone services, vendor security components and power management. That list takes precedence even if a future contributor accidentally adds the same package to the optional rules. Patterns are only used to **protect** packages.
+
+On Xiaomi, `com.aura.oobe.xiaomi` is an optional setup-recommendation candidate, separate from MSA. The tool requires completed device and primary-user setup, corroborating Aura metadata and the usual role and UID checks. The light preset leaves it alone; select it explicitly if you want it disabled.
+
+The protective identifiers and patterns were adapted from [Shibakaa/cleanyourdroid's catalog at 6234b0b](https://github.com/Shibakaa/cleanyourdroid/blob/6234b0b054d86f348b5fcb2f87fe4b04290e6f79/safety/bootloop_blacklist.json) under [its MIT license](../LICENSES/cleanyourdroid-MIT.txt). Its [POCO F5 field report](https://github.com/Shibakaa/cleanyourdroid/blob/6234b0b054d86f348b5fcb2f87fe4b04290e6f79/devices/xiaomi/poco-f5-marble.md) identified the Aura variant. That is upstream device evidence, not a hardware test of this CLI.

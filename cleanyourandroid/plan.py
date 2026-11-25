@@ -10,7 +10,7 @@ import tempfile
 
 from .adb import DeviceError, package_name
 from .audit import ANIMATIONS, CELLULAR, SAVER, SAVER_LEVELS, SCALES, SETTINGS, cache_only_supported
-from . import dns, oem
+from . import critical, dns, oem
 
 
 def json_bytes(value):
@@ -125,7 +125,8 @@ def check_operations(operations):
         if kind == "setting":
             if value not in SETTING_VALUES.get(target, ()):
                 raise DeviceError(f"Unsupported setting or value for {target}.")
-        elif kind in APP_ACTIONS and target in oem.RULES and type(value) is int and APP_ACTIONS[kind] == value:
+        elif (kind in APP_ACTIONS and target in oem.RULES and not critical.protected(target)
+              and type(value) is int and APP_ACTIONS[kind] == value):
             pass
         elif kind == "dns" and target == "private_dns" and dns.hostname(value) == value:
             pass

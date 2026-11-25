@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cleanyourandroid import adb, dns, oem, plan
+from cleanyourandroid import adb, critical, dns, oem, plan
 
 
 class Phone:
@@ -22,6 +22,7 @@ class Phone:
         self.play_store = True
         self.role_holder = None
         self.settings = {dns.MODE: "opportunistic"}
+        self.secure = {}
         self.fail_after_write = None
         self.mutations = []
 
@@ -37,7 +38,7 @@ class Phone:
 
     def shell(self, *words, **kwargs):
         if words[:2] == ("settings", "--user"):
-            return "null"
+            return self.secure.get(words[-1], "null")
         if words[0] == "settings":
             _, action, _, key, *value = words
             if action == "get":
@@ -147,6 +148,31 @@ class OEMTests(unittest.TestCase):
         phone.system = False
         self.assertEqual(oem.verified_candidates(phone), [])
         self.assertFalse(phone.mutations)
+
+    def test_critical_packages_win_even_against_an_erroneous_new_rule(self):
+        self.assertFalse(any(critical.protected(name) for name in oem.RULES))
+        for package in ("com.miui.powerkeeper", "com.bbk.launcher2", "com.google.android.gms.example"):
+            phone = Phone("vivo", package)
+            misplaced = oem.Rule("vivo", "Example", "Example", "Example", (package + ".",))
+            with patch.dict(oem.RULES, {package: misplaced}):
+                self.assertEqual(oem.verified_candidates(phone), [])
+                self.assertEqual(oem.review_apps(phone, set()), [])
+                for kind, value in (("disable", 3), ("remove", -1)):
+                    with self.assertRaises(adb.DeviceError):
+                        plan.create_plan(phone, [dict(kind=kind, target=package, value=value)], self.source)
+            self.assertFalse(phone.mutations)
+
+    def test_xiaomi_aura_needs_complete_setup_and_vendor_metadata(self):
+        phone = Phone("Xiaomi", "com.aura.oobe.xiaomi")
+        phone.markers = "com.ironsource.aura.Setup"
+        phone.settings["device_provisioned"] = "1"
+        self.assertFalse(oem.verified_candidates(phone))
+        phone.secure["user_setup_complete"] = "1"
+        candidate, = oem.verified_candidates(phone)
+        self.assertTrue(candidate["disable_allowed"])
+        self.assertFalse(oem.RULES[phone.package].ad_service)
+        phone.markers = phone.package
+        self.assertFalse(oem.verified_candidates(phone))
 
     def test_rule_refuses_protected_and_uncorroborated_packages(self):
         for field, value in (

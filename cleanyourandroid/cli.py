@@ -31,6 +31,7 @@ def parser():
     sub = commands.add_parser("cache-settings", help="Open App info so you can clear cache on the phone")
     target(sub)
     sub.add_argument("package")
+    target(commands.add_parser("scan-settings", help="Review Wi-Fi and Bluetooth scanning in Android Settings"))
     for name in ("compare-frames", "compare-standby"):
         sub = commands.add_parser(name, help=f"Calculate the delta between two {name[8:]} snapshots")
         sub.add_argument("before", type=Path)
@@ -98,6 +99,18 @@ def read_json(path):
     return json.loads(path.read_bytes())
 
 
+def open_settings(device, action, manual_path, *arguments):
+    if not device.is_owner_active():
+        raise DeviceError("Switch to the primary Android user before opening Settings.")
+    try:
+        status = device.shell("am", "start", "-W", "--user", "0", "-p", "com.android.settings",
+                              "-a", action, *arguments)
+    except DeviceError as exc:
+        raise DeviceError(f"Could not open Android Settings. On the phone, use {manual_path}.") from exc
+    if "Status: ok" not in {line.strip() for line in status.splitlines()}:
+        raise DeviceError(f"Android did not confirm this screen. On the phone, use {manual_path}.")
+
+
 def execute(args):
     command = args.command
     if command == "devices":
@@ -144,11 +157,16 @@ def execute(args):
         return {"plan": str(args.out), "approval_sha256": approval, **read_json(args.out)}
     if command == "cache-settings":
         package = package_name(args.package)
-        if not device.is_owner_active() or package not in oem.packages(device):
-            raise DeviceError("Select an installed package while the primary Android user is active.")
-        device.shell("am", "start", "--user", "0", "-a", "android.settings.APPLICATION_DETAILS_SETTINGS",
-                     "-d", "package:" + package)
+        if package not in oem.packages(device):
+            raise DeviceError("Select a package installed for the primary Android user.")
+        open_settings(device, "android.settings.APPLICATION_DETAILS_SETTINGS",
+                      "Settings → Apps → App info", "-d", "package:" + package)
         return {"package": package, "next": "In App info, open Storage and choose Clear cache. Leave Clear storage/data alone."}
+    if command == "scan-settings":
+        open_settings(device, "android.settings.LOCATION_SCANNING_SETTINGS",
+                      "Settings → Location → Location services (or search Settings for scanning)")
+        return {"next": "Review Wi-Fi and Bluetooth scanning. Turning them off can affect location accuracy "
+                        "and nearby-device features. No switch was changed by the CLI."}
     if command == "apply":
         return {"journal": str(args.journal), "operations": plan.apply(device, args.plan, args.approve, args.journal)}
     if command == "restore":

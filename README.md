@@ -67,6 +67,8 @@ Use the options below with `cleanyourandroid plan … --out .cyandroid/NAME.json
 
 **When cache clearing is unavailable:** check `cache_only_supported` in the audit. Some phones advertise cache clearing but deny ADB the required permission. Run `cleanyourandroid cache-settings PACKAGE` to open that app's info screen, then choose **Storage → Clear cache** yourself. **Clear storage / Clear data** erases app data. The CLI never uses it as a fallback. Apps can rebuild cache, use network data, and load more slowly after clearing; target storage pressure rather than clearing on a schedule.
 
+For a standby-drain investigation, `cleanyourandroid scan-settings` opens Android's Wi-Fi and Bluetooth scanning controls. You can review each switch on the phone without sharing your location or nearby networks. Turning scanning off may reduce location accuracy; the CLI does not change either switch.
+
 ## Measure the result
 
 Save one audit before maintenance and another afterward, on the same phone and firmware. Run the comparison after disconnecting if you like:

@@ -14,6 +14,7 @@ cli audit --out "$work/audit.json" > /dev/null
 jq -e '.volume.total_bytes > 0 and (.settings | has("window_animation_scale"))' "$work/audit.json"
 cli ads > "$work/ads.json"
 jq -e '.candidates | type == "array"' "$work/ads.json"
+cli scan-settings
 
 # Round-trip four independent settings using a single reviewed plan.
 keys=(window_animation_scale transition_animation_scale animator_duration_scale low_power_trigger_level)

@@ -7,6 +7,7 @@
 - Added cache-only plans for named apps and preview by size. Unsupported builds can open Android's App info screen without clearing any data.
 - Removed personal-file scanning, backup, removal, and restore commands from the current CLI. Existing backups are untouched. See [recovery instructions](docs/safety.md#existing-02-file-backups) if you have a 0.2 backup.
 - Added an independent protection list for critical package names and families, a post-setup-only Xiaomi Aura rule, and an offline before/after comparison with optional HTML export.
+- Added a shortcut to review background Wi-Fi and Bluetooth scanning on the phone without reading location or changing either switch.
 - Added a disposable Android emulator check alongside the Linux, macOS, and Windows test matrix.
 
 ## 0.2.0

@@ -152,13 +152,28 @@ class WorkflowTests(unittest.TestCase):
     def test_cache_settings_opens_app_info_without_a_clear_operation(self):
         args = cli.parser().parse_args(["cache-settings", "com.example.fixture"])
         phone = Mock()
-        phone.shell.return_value = "package:com.example.fixture"
+        phone.shell.side_effect = ["package:com.example.fixture", "Status: ok\nComplete"]
         with patch.object(cli, "Device", return_value=phone):
             self.assertIn("Clear cache", cli.execute(args)["next"])
         self.assertEqual([call.args for call in phone.shell.call_args_list], [
             ("pm", "list", "packages", "--user", "0"),
-            ("am", "start", "--user", "0", "-a", "android.settings.APPLICATION_DETAILS_SETTINGS",
+            ("am", "start", "-W", "--user", "0", "-p", "com.android.settings", "-a", "android.settings.APPLICATION_DETAILS_SETTINGS",
              "-d", "package:com.example.fixture")])
+
+    def test_scan_screen_does_not_inspect_location_or_write_radio_settings(self):
+        args = cli.parser().parse_args(["scan-settings"])
+        phone = Mock()
+        phone.shell.side_effect = ["Status: ok", "Error: unable to resolve Intent"]
+        with patch.object(cli, "Device", return_value=phone):
+            self.assertIn("No switch was changed", cli.execute(args)["next"])
+            with self.assertRaisesRegex(adb.DeviceError, "Location services"):
+                cli.execute(args)
+            phone.is_owner_active.return_value = False
+            with self.assertRaisesRegex(adb.DeviceError, "primary Android user"):
+                cli.execute(args)
+        self.assertEqual([call.args for call in phone.shell.call_args_list],
+                         [("am", "start", "-W", "--user", "0", "-p", "com.android.settings", "-a",
+                           "android.settings.LOCATION_SCANNING_SETTINGS")] * 2)
 
     def test_cache_threshold_freezes_an_exact_list_and_excludes_other_apps(self):
         source = self.root / "plan"

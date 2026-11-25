@@ -48,7 +48,7 @@ Start a new Codex session and invoke `$cleanyourandroid`. To use an existing che
 
 ## Read-only MCP
 
-Install [uv](https://docs.astral.sh/uv/) so your agent can run `uvx`. The examples pin CleanYourAndroid to v0.2.0. Clients with a restricted PATH may need the full path to `uvx` and a `CLEANYOURANDROID_ADB` environment variable pointing to `adb`.
+Install [uv](https://docs.astral.sh/uv/) so your agent can run `uvx`. The examples pin CleanYourAndroid to [the 0.3.0 implementation](https://github.com/shiv-eshwar/cleanyourandroid/commit/09a2153bd4c812e1ff9ae8a5a3a94f195660060c). Clients with a restricted PATH may need the full path to `uvx` and a `CLEANYOURANDROID_ADB` environment variable pointing to `adb`.
 
 | Client | Setup |
 | --- | --- |
@@ -66,7 +66,7 @@ Keep your existing server entries when merging. Once connected, ask the client t
 
 ```sh
 claude mcp add --transport stdio --scope user cleanyourandroid -- uvx --python 3.12 \
-  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@v0.2.0" \
+  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@09a2153bd4c812e1ff9ae8a5a3a94f195660060c" \
   cleanyourandroid-mcp
 claude mcp list
 ```
@@ -88,7 +88,7 @@ On **OpenCode 1.x**, merge [the OpenCode example](../examples/agents/opencode.js
 
 ```sh
 opencode mcp add cleanyourandroid -- uvx --python 3.12 \
-  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@v0.2.0" \
+  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@09a2153bd4c812e1ff9ae8a5a3a94f195660060c" \
   cleanyourandroid-mcp
 opencode mcp list
 ```
@@ -99,7 +99,7 @@ OpenCode 2.2.5 and 2.3.0 accepted the entry in testing, but their standalone MCP
 
 ```sh
 codex mcp add cleanyourandroid -- uvx --python 3.12 \
-  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@v0.2.0" \
+  --from "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@09a2153bd4c812e1ff9ae8a5a3a94f195660060c" \
   cleanyourandroid-mcp
 codex mcp list
 ```

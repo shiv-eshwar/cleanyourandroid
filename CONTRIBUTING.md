@@ -27,6 +27,10 @@ git diff --check
 
 When changing the CLI, keep audit commands read-only and use the existing approval and rollback flows. Keep the MCP tools read-only. If platform-specific behavior prevents verification, report the limit instead of guessing.
 
+CI also boots a disposable Android emulator. It tests settings restoration and compares cache behavior with the image's permissions using a generated app containing only synthetic markers. No personal handset is needed; do not point integration tests at one.
+
+For a new OEM rule, add a matching fixture, a negative case, and the user-visible impact in the OEM guide. Explain why a package is safe to *offer* and whether it should ever appear in the light preset. Never add a wildcard package rule, broad data clear, or personal-file scan.
+
 Report vulnerabilities privately. [Security reporting](SECURITY.md)
 
 [device-report]: https://github.com/shiv-eshwar/cleanyourandroid/issues/new?template=device-report.yml

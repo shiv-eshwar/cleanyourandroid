@@ -23,3 +23,5 @@ include = ["cleanyourandroid*"]
 
 [project.urls]
 Repository = "https://github.com/shiv-eshwar/cleanyourandroid"
+Issues = "https://github.com/shiv-eshwar/cleanyourandroid/issues"
+Changelog = "https://github.com/shiv-eshwar/cleanyourandroid/blob/main/CHANGELOG.md"

@@ -1,125 +1,93 @@
 # CleanYourAndroid
 
-**Find what is slowing down your Android phone. Fix what the evidence supports.**
+[![CI](https://github.com/shiv-eshwar/cleanyourandroid/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shiv-eshwar/cleanyourandroid/actions/workflows/ci.yml) · [MIT license](LICENSE)
 
-CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain, app bloat, and storage use. It keeps your existing launcher, wallpaper, and interface. The core CLI needs Python and Android Platform-Tools. Root access and a bootloader unlock are unnecessary.
+Reduce preinstalled clutter, shorten animations, and cut down on ads on the Android phone you already own. CleanYourAndroid runs on your computer over [ADB](https://developer.android.com/tools/adb). You keep your launcher, firmware, and system updates. No root, bootloader unlock, or app installation on the phone is needed.
 
-![Battery Saver settings on a Nothing Phone (2a) beside live CleanYourAndroid output showing Android 17, Battery Saver off, and 90 fps rendering](docs/images/live-diagnostic.png)
-
-*Real USB session on a Nothing Phone (2a). The preview shows selected fields from `diagnose` alongside the phone's Battery Saver screen.*
-
-| Start with | What you get |
-| --- | --- |
-| [Quick start](#quick-start) | Run your first audit over USB or Wi-Fi |
-| [Diagnose lag and Battery Saver](docs/performance.md) | Measure what changes when your phone stutters |
-| [Reduce OEM ads and preinstalls](docs/ads-and-preinstalls.md) | Audit OPPO, vivo, and Nothing recommendation components and configure optional DNS filtering |
-| [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
-| [Use a coding assistant](#use-a-coding-assistant) | Set up Claude Code, Cursor, OpenCode, Codex, or another agent |
-| [Contribute](#contribute) | Share a tested finding from your phone |
+**The cleaner does not scan photos, downloads, messages, contacts, or app contents.** It asks Android for system measurements, package metadata, and settings. It shows exactly which packages and settings a plan would change before you apply it.
 
 ## Quick start
 
-Install Python 3.10+ and [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). Put Platform-Tools on your PATH or point `CLEANYOURANDROID_ADB` at the full path to `adb`. The CLI also checks common SDK folders.
+1. Install Python **3.10 or newer** and [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). Put `adb` on your PATH, or set `CLEANYOURANDROID_ADB` to its full path.
+2. Enable **USB debugging**, connect a data cable, and accept the authorization prompt on your phone. See [USB setup, Windows drivers, and wireless pairing](docs/connect.md) if the phone doesn't appear.
+3. Install the CLI. With [uv](https://docs.astral.sh/uv/), run:
+
+   ```sh
+   uv tool install --python 3.12 "git+https://github.com/shiv-eshwar/cleanyourandroid.git"
+   ```
+
+   Alternatively, clone this repository and run `python -m pip install .` in an activated virtual environment. From the checkout you can also substitute `python -m cleanyourandroid` for the installed command. The core CLI has no third-party Python dependencies.
 
 ```sh
-git clone https://github.com/shiv-eshwar/cleanyourandroid.git
-cd cleanyourandroid
-python3 -m cleanyourandroid devices
-python3 -m cleanyourandroid audit
-```
-
-On Windows, use `py -3.12 -m cleanyourandroid` with Python 3.12 installed. To install a standalone command with [uv](https://docs.astral.sh/uv/):
-
-```sh
-uv tool install --python 3.12 "git+https://github.com/shiv-eshwar/cleanyourandroid.git"
 cleanyourandroid devices
+cleanyourandroid audit
+cleanyourandroid ads
 ```
 
-Use either connection below. If two transports show up for the same phone, pass the intended serial from `devices` to every device command.
+These commands are read-only. In `audit`, look for free space, the largest estimated caches, animation scales, battery condition, and eligible preinstalls. In `ads`, look for the controls specific to your manufacturer. If more than one device is online, add `--serial YOUR_SERIAL` after the subcommand.
+
+## Try the light preset
 
 ```sh
-cleanyourandroid audit --serial YOUR_SERIAL
-cleanyourandroid diagnose --serial YOUR_SERIAL
+mkdir .cyandroid
+cleanyourandroid plan --light --out .cyandroid/light.json
 ```
 
-### USB debugging
+The preset proposes **0.5× animations** for scales that are unset or higher than 0.5×. It preserves motion that's already reduced or off. On supported Xiaomi and OPPO builds it can also propose disabling a verified, dedicated advertising service. It doesn't select app stores, uninstall apps, choose a DNS provider, clear caches, or change Battery Saver. If nothing qualifies, it says so.
 
-1. On the phone, open **Settings → About phone** and tap **Build number** seven times. It may be under **Software information**. Confirm your screen lock if prompted.
-2. Open **Developer options** and enable **USB debugging**.
-3. Attach a USB data cable, unlock the phone, and tap **Allow** in the debugging prompt for this computer.
-4. Run `adb devices -l` and look for the state `device`. If it says `unauthorized`, accept the prompt on the phone. If the phone is missing, try a data-capable cable or another port. Windows may need the manufacturer's USB driver. Linux may need [ADB device permissions](https://developer.android.com/studio/run/device#setting-up).
-
-### Wireless debugging
-
-Use Android 11 or later, a recent `adb`, and a trusted Wi-Fi network shared by the phone and computer.
-
-1. Open **Developer options → Wireless debugging → Pair device with pairing code**. Keep the pairing dialog visible.
-2. Pair using the address and port in the **pairing dialog**. Enter the six-digit code at the terminal prompt.
-3. Return to the main **Wireless debugging** screen. Connect using the address and port shown on **that page**.
+Read the printed `operations`, `observed` values, and `review_notes`. To proceed, replace the placeholder below with the `approval_sha256` printed for **that plan**:
 
 ```sh
-adb pair 192.168.1.50:37123
-adb connect 192.168.1.50:43657
-adb devices -l
-```
-
-The two ports serve different purposes and can change. Confirm both on the phone. Reopen the pairing dialog for a fresh code if the old one expires. Run `adb mdns services` if automatic discovery fails. Android Studio also offers QR pairing under **Device Manager → Pair Devices Using Wi-Fi**. Use USB if the network blocks peer connections. Turn off debugging on the phone when you finish.
-
-## Review and apply changes
-
-Start with `audit`. It reports observed CPU activity, thermal state, battery policy, graphics information available on the build, free space, cached app sizes, and known optional packages. A single snapshot cannot establish which process caused a stall. Use the [performance guide](docs/performance.md) to compare repeatable workloads.
-
-Choose an action that addresses a measured issue. For example, if Battery Saver turns on automatically and app launches feel slower:
-
-```sh
-mkdir -p .cyandroid
-cleanyourandroid plan --disable-auto-saver --out .cyandroid/plan.json
-```
-
-Read the plan, including the observed values and operations. Copy its `approval_sha256` after reviewing it.
-
-```sh
-cleanyourandroid apply .cyandroid/plan.json --approve APPROVAL_SHA256 --journal .cyandroid/rollback.json
+cleanyourandroid apply .cyandroid/light.json --approve PASTE_REVIEWED_SHA256_HERE --journal .cyandroid/light-journal.json
 cleanyourandroid diagnose
 ```
 
-| Plan option | Effect |
+Try the same app or gesture again. To undo the reversible changes, use the same phone and journal:
+
+```sh
+cleanyourandroid restore .cyandroid/light-journal.json
+```
+
+Use fresh plan and journal filenames for each run. The journal is written before the first change; keep it if the connection drops. [Recovery and older 0.2 file backups](docs/safety.md).
+
+## Choose individual changes
+
+Use the options below with `cleanyourandroid plan … --out .cyandroid/NAME.json`, then review and apply as above. Each option is independent.
+
+| Goal | Option | What changes |
+| --- | --- | --- |
+| Hide bloatware | `--disable-package PACKAGE` | Stops an eligible system preinstall for the primary user. Its APK and app data stay on the phone. Start here if you may want it back. |
+| Remove a preinstall | `--remove-preinstall PACKAGE` | For an eligible factory APK, Android removes it for user 0 and keeps its data. The system APK remains, so this can reclaim little space. |
+| Reduce network ads | `--private-dns HOSTNAME` | On Android 9+, use a DNS-over-TLS resolver you choose. A filtering resolver sees DNS queries and can affect connectivity. [Provider example and rollback](docs/ads-and-preinstalls.md#filter-network-ads-with-private-dns). |
+| Adjust motion | `--animation-scale 0.5` | Sets window, transition, and animator duration. Choose `0` for off or `1` for standard. Shorter animations do not increase frame rate. |
+| Extend battery runtime | `--battery-saver-at 20` | Requests Battery Saver at 15%, 20%, or 25% on a percentage schedule. Check the OEM Battery settings. `--disable-auto-saver` turns that trigger off. |
+| Reduce cellular standby use | `--disable-always-on-mobile-data` | Allows cellular data to idle on Wi-Fi; switching back to cellular may take longer. |
+| Reclaim temporary space | `--clear-cache PACKAGE` | Requests cache-only clearing for a named installed app; repeat for multiple apps. Cleared cache cannot be restored. |
+| Review large caches together | `--clear-cache-above-mib 128` | Lists installed third-party apps whose cached estimate is at least 128 MiB. The exact list is frozen in the plan. Android's estimates may be stale. |
+
+**When cache clearing is unavailable:** check `cache_only_supported` in the audit. Some phones advertise cache clearing but deny ADB the required permission. Run `cleanyourandroid cache-settings PACKAGE` to open that app's info screen, then choose **Storage → Clear cache** yourself. **Clear storage / Clear data** erases app data. The CLI never uses it as a fallback. Apps can rebuild cache, use network data, and load more slowly after clearing; target storage pressure rather than clearing on a schedule.
+
+## What to expect on your phone
+
+| Phone | Where to start |
 | --- | --- |
-| `--disable-auto-saver` | Turn off the percentage-based Battery Saver trigger. Manual Battery Saver remains available. This can shorten the last stretch of battery runtime. |
-| `--disable-always-on-mobile-data` | Allow the extra cellular data session to close while Wi-Fi is connected. Handoff may take longer. |
-| `--disable-package PACKAGE` | Disable a verified optional preinstall for the primary user and keep its data. |
-| `--remove-preinstall PACKAGE` | Remove an eligible base-image preinstall for the primary user and keep its data. The factory APK remains available for restore. |
-| `--private-dns HOSTNAME` | Set a reviewed DNS-over-TLS provider. A filtering resolver can block some network ad domains. |
-| `--clear-cache PACKAGE` | Clear only the cache for a listed app when Android supports the command. Use App info → Storage and cache → **Clear cache** if the result is unconfirmed. |
+| Xiaomi / Redmi / POCO (MIUI or HyperOS) | Check for MSA and the recommendation switches in Security, Themes, and GetApps. Package variants are matched separately. |
+| OPPO (ColorOS) | Check App Market recommendation settings and whether the audit recognizes a dedicated advertising component. |
+| vivo (Funtouch OS / OriginOS) | Check **Hot Apps / Hot Games** in V-Appstore. Keep the store if you need its app updates. |
+| Other Android phones | Try diagnostics and motion settings. Selected cross-brand preinstalls can qualify; unrecognized packages remain inventory only. |
 
-To undo the reversible settings and package changes:
+The [OEM guide](docs/ads-and-preinstalls.md) lists exact package names, update tradeoffs, and protection checks. OEM menus and permissions vary by model, region, and build. Package operations target primary user 0. Animation, power, and DNS settings are device-wide. Hardware support for the vivo, OPPO, and Xiaomi rules is **not yet confirmed**; the repository tests them with simulated devices. On a [disposable Android 16 emulator](https://github.com/shiv-eshwar/cleanyourandroid/actions/runs/45592454907), CI verified settings rollback and the manual cache fallback against a throwaway app with separate cache and data markers.
 
-```sh
-cleanyourandroid restore .cyandroid/rollback.json
-```
+You can make a phone feel closer to stock Android without installing a Pixel ROM. Actual speed still depends on hardware, heat, storage, apps, and firmware. DNS cannot filter an ad served from the same domain as the content. Android's battery health status describes a condition such as `good` or `overheat`; it cannot measure remaining capacity on every phone or repair a worn cell. Use the [performance guide](docs/performance.md) to compare frame timing and standby drain under the same conditions.
 
-A cache clear cannot be reversed. After firmware updates, run a fresh audit and review any new plan. Start with `cleanyourandroid ads` for OEM recommendation controls, per-user debloat candidates, and Private DNS. [Ads and preinstalled apps](docs/ads-and-preinstalls.md)
+![Selected diagnostic readings from a USB session on a Nothing Phone (2a), alongside its Battery Saver screen](docs/images/live-diagnostic.png)
 
-## Use a coding assistant
+*An earlier read-only hardware check on a Nothing Phone (2a). A single render-rate reading is not a before-and-after benchmark.*
 
-Use one shared skill with Claude Code, Cursor, OpenCode, Codex, and other Agent Skills clients.
+## Privacy, agents, and contributions
 
-```sh
-npx --yes skills add shiv-eshwar/cleanyourandroid --skill cleanyourandroid --agent claude-code cursor opencode
-```
+Reports stay on the computer that runs the CLI. They can contain installed package names and build or network details. Keep plans and journals under `.cyandroid/` (ignored by Git), and share only the values needed to explain a result. If you connect a coding assistant, its own data handling applies. [Agent and read-only MCP setup](docs/agents.md).
 
-The [agent installation guide](docs/agents.md) covers native Claude Code and Codex plugins, manual skill installation, and ready-to-copy read-only MCP configurations. For any local shell-capable coding agent, open this checkout and paste [PROMPT.md](PROMPT.md).
+[Contributing](CONTRIBUTING.md) · [Report a device result](https://github.com/shiv-eshwar/cleanyourandroid/issues/new?template=device-report.yml) · [Report a security issue privately](SECURITY.md) · [Changelog](CHANGELOG.md). A useful compatibility report names the model and firmware, the feature tested, and whether restore worked. Please leave device identifiers and personal content out.
 
-## Compatibility and privacy
-
-The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**, using USB. Output and available commands vary by Android release and OEM. OPPO and vivo rules are simulator-tested. Physical-device reports are welcome. Private Space and cloned app profiles are outside the cleanup scope.
-
-Diagnostic reports, plans, and journals stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers or package inventories.
-
-## Contribute
-
-**Found something on your phone that belongs here? Open a pull request.** Device compatibility notes, verified optional packages, reproducible performance findings, and documentation improvements all help. Include your phone model, Android version, build, and what you tested. If you are still investigating, start with a [device report](https://github.com/shiv-eshwar/cleanyourandroid/issues/new?template=device-report.yml).
-
-[Contributing guide](CONTRIBUTING.md) · [Pull requests](https://github.com/shiv-eshwar/cleanyourandroid/pulls) · [Security reporting](SECURITY.md)
-
-Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv) and its inspect, review, and restore workflow. CleanYourAndroid is an independently implemented, performance-focused phone project. [MIT License](LICENSE).
+Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv). CleanYourAndroid is an independent project.

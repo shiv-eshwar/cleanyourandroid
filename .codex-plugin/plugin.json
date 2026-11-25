@@ -6,7 +6,7 @@
   "skills": "./skills",
   "interface": {
     "displayName": "CleanYourAndroid",
-    "shortDescription": "Android performance audits and backup-first cleanup",
+    "shortDescription": "Android performance audits and system cleanup",
     "category": "Developer Tools",
     "websiteURL": "https://github.com/shiv-eshwar/cleanyourandroid"
   }

@@ -76,12 +76,6 @@ class Device:
     def shell(self, *words, timeout=30):
         return self.shell_bytes(*words, timeout=timeout).decode(errors="replace").strip()
 
-    def pull(self, remote, target):
-        run_adb(*self.selector, "pull", "-a", str(remote), str(target), timeout=900)
-
-    def push(self, source, target):
-        run_adb(*self.selector, "push", str(source), str(target), timeout=900)
-
     def prop(self, name):
         return self.shell("getprop", name)
 

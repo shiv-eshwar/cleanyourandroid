@@ -14,7 +14,6 @@ CleanYourAndroid is a local ADB toolkit for diagnosing lag, heat, battery drain,
 | [Diagnose lag and Battery Saver](docs/performance.md) | Measure what changes when your phone stutters |
 | [Reduce OEM ads and preinstalls](docs/ads-and-preinstalls.md) | Audit OPPO, vivo, and Nothing recommendation components and configure optional DNS filtering |
 | [Review and apply changes](#review-and-apply-changes) | Preview the exact actions and save a rollback journal |
-| [Clean up large files](#clean-up-large-files) | Verify a backup and a retained copy before removing a duplicate |
 | [Use a coding assistant](#use-a-coding-assistant) | Set up Claude Code, Cursor, OpenCode, Codex, or another agent |
 | [Contribute](#contribute) | Share a tested finding from your phone |
 
@@ -101,31 +100,6 @@ cleanyourandroid restore .cyandroid/rollback.json
 
 A cache clear cannot be reversed. After firmware updates, run a fresh audit and review any new plan. Start with `cleanyourandroid ads` for OEM recommendation controls, per-user debloat candidates, and Private DNS. [Ads and preinstalled apps](docs/ads-and-preinstalls.md)
 
-## Clean up large files
-
-```sh
-cleanyourandroid files --min-mib 75
-cleanyourandroid files --min-mib 25 --duplicates --out .cyandroid/large-files.json
-```
-
-The scan covers Downloads, Camera, and the WhatsApp Sent documents folder in the primary profile. A matching SHA-256 establishes that two copies have identical contents. It does not establish that the chat can still open an attachment after its copy is removed.
-
-Backup requires exact approved paths. This example backs up an installer without changing the phone:
-
-```sh
-cleanyourandroid backup-files --out .cyandroid/backup \
-  --apk "/storage/emulated/0/Download/old-installer.apk"
-```
-
-For a verified duplicate, use `--duplicate "SENT_COPY" "RETAINED_CAMERA_OR_QUICK_SHARE_COPY"`. A plan can include multiple paths. Inspect `files.json`, then use the printed approval digest:
-
-```sh
-cleanyourandroid remove-files .cyandroid/backup/files.json --approve APPROVAL_SHA256
-cleanyourandroid restore-files .cyandroid/backup/files.json
-```
-
-The restore command is optional and skips identical existing files. It refuses to overwrite different contents. It can put bytes back on the phone, but it cannot promise that WhatsApp restores its own index. [Backup and interruption details](docs/safety.md).
-
 ## Use a coding assistant
 
 Use one shared skill with Claude Code, Cursor, OpenCode, Codex, and other Agent Skills clients.
@@ -140,7 +114,7 @@ The [agent installation guide](docs/agents.md) covers native Claude Code and Cod
 
 The CLI's read-only paths were verified on a **Nothing Phone (2a), Android 17**, using USB. Output and available commands vary by Android release and OEM. OPPO and vivo rules are simulator-tested. Physical-device reports are welcome. Private Space and cloned app profiles are outside the cleanup scope.
 
-Diagnostics, file names, approvals, and backups stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers, or filenames.
+Diagnostic reports, plans, and journals stay on your computer unless you choose to send them to an assistant or another service. Put local work in `.cyandroid/`. Review anything you intend to share because it may contain app names, build identifiers or package inventories.
 
 ## Contribute
 

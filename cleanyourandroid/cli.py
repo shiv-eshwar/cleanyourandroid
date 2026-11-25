@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import audit as reporting
-from . import dns, files, oem, plan
+from . import dns, oem, plan
 from .adb import Device, DeviceError, devices
 
 
@@ -32,11 +32,6 @@ def parser():
         sub = commands.add_parser(name, help=f"Calculate the delta between two {name[8:]} snapshots")
         sub.add_argument("before", type=Path)
         sub.add_argument("after", type=Path)
-    sub = commands.add_parser("files", help="Find large Downloads, Camera and WhatsApp Sent files")
-    target(sub)
-    sub.add_argument("--min-mib", type=int, default=75)
-    sub.add_argument("--duplicates", action="store_true", help="Hash same-size candidates on the phone")
-    sub.add_argument("--out", type=Path)
     sub = commands.add_parser("plan", help="Preview explicit package and performance changes")
     target(sub)
     sub.add_argument("--out", type=Path, required=True)
@@ -57,18 +52,6 @@ def parser():
     sub = commands.add_parser("restore", help="Restore reversible settings in a local journal")
     target(sub)
     sub.add_argument("journal", type=Path)
-    sub = commands.add_parser("backup-files", help="Back up selected APKs and confirmed duplicate videos")
-    target(sub)
-    sub.add_argument("--out", type=Path, required=True, help="New local backup folder")
-    sub.add_argument("--apk", action="append", default=[], metavar="PATH")
-    sub.add_argument("--duplicate", action="append", nargs=2, default=[], metavar=("SENT_COPY", "RETAINED_COPY"))
-    sub = commands.add_parser("remove-files", help="Remove only files in a reviewed verified backup manifest")
-    target(sub)
-    sub.add_argument("manifest", type=Path)
-    sub.add_argument("--approve", required=True, help="SHA-256 shown when the backup was created")
-    sub = commands.add_parser("restore-files", help="Copy backed-up files to their original paths without overwriting")
-    target(sub)
-    sub.add_argument("manifest", type=Path)
     return root
 
 
@@ -123,8 +106,6 @@ def execute(args):
             "battery_saver": device.shell("settings", "get", "global", "low_power"),
             "graphics": reporting.frame_stats(device, args.package),
         }
-    if command == "files":
-        return files.inspect_files(device, args.min_mib, args.duplicates)
     if command == "plan":
         rows = operations(args)
         approval = plan.create_plan(device, rows, args.out)
@@ -133,13 +114,6 @@ def execute(args):
         return {"journal": str(args.journal), "operations": plan.apply(device, args.plan, args.approve, args.journal)}
     if command == "restore":
         return {"operations": plan.restore(device, args.journal)}
-    if command == "backup-files":
-        manifest, approval = files.backup(device, args.out, args.apk, args.duplicate)
-        return {"manifest": str(manifest), "approval_sha256": approval}
-    if command == "remove-files":
-        return files.remove(device, args.manifest, args.approve)
-    if command == "restore-files":
-        return files.restore(device, args.manifest, read_json(args.manifest))
     raise DeviceError(f"Unknown command {command}")
 
 
@@ -147,13 +121,13 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         result = execute(args)
-        if args.command in {"audit", "diagnose", "standby", "ads", "frames", "files"} and args.out:
+        if args.command in {"audit", "diagnose", "standby", "ads", "frames"} and args.out:
             plan.create_json(args.out, result)
         sys.stdout.buffer.write(plan.json_bytes(result))
     except (DeviceError, OSError, ValueError, KeyError, TypeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("Interrupted. Review any local journal or backup before retrying.", file=sys.stderr)
+        print("Interrupted. Review any local journal before retrying.", file=sys.stderr)
         return 130
     return 0

@@ -1,5 +1,4 @@
 from contextlib import redirect_stderr
-import hashlib
 from io import StringIO
 import json
 from pathlib import Path
@@ -8,16 +7,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cleanyourandroid import adb, audit, files, plan
+from cleanyourandroid import adb, audit, cli, plan
 
 
 class FakePhone:
     def __init__(self):
         self.settings = {audit.SAVER: "25", audit.CELLULAR: "null"}
-        self.phone_files = {}
         self.mutations = []
         self.fail_after_write = None
-        self.change_on_move = None
 
     def identity(self):
         return "test-hardware"
@@ -27,12 +24,6 @@ class FakePhone:
 
     def prop(self, key):
         return {"ro.build.fingerprint": "test/build", "ro.product.manufacturer": "Nothing"}[key]
-
-    def pull(self, remote, local):
-        local.write_bytes(self.phone_files[str(remote)][0])
-
-    def push(self, local, remote):
-        self.phone_files[str(remote)] = local.read_bytes(), 42
 
     def shell(self, *args, **kwargs):
         words = tuple(map(str, args))
@@ -49,33 +40,6 @@ class FakePhone:
                 self.settings.pop(key, None)
             return ""
         if words[:3] == ("pm", "list", "packages"):
-            return ""
-        if words[0] == "realpath":
-            return words[-1]
-        if words[0] in {"stat", "sha256sum"}:
-            data, inode = self.phone_files[words[-1]]
-            if words[0] == "sha256sum":
-                return hashlib.sha256(data).hexdigest() + "  " + words[-1]
-            if words[2] == "%f %s %d:%i %h":
-                return f"81f8 {len(data)} 1:{inode} 2"
-            return f"1:{inode}:{len(data)}:timestamp"
-        if words[0] == "sh":
-            if words[2].startswith("if [ -e"):
-                return "yes" if words[-1] in self.phone_files else "no"
-            self.mutations.append(words)
-            self.phone_files.pop(words[4])
-            return ""
-        if words[0] == "mv":
-            *_, source, destination = words
-            if destination not in self.phone_files:
-                data, inode = self.phone_files.pop(source)
-                if self.change_on_move and source == self.change_on_move:
-                    data = b"newer content"
-                    self.change_on_move = None
-                self.phone_files[destination] = data, inode
-            return ""
-        if words[0] == "rm":
-            self.phone_files.pop(words[-1], None)
             return ""
         raise AssertionError(words)
 
@@ -116,62 +80,22 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(journal.exists())
         self.assertFalse(self.phone.mutations)
 
-    def make_file_backup(self):
-        source = str(files.SENT / "DOC-1234.")
-        retained = str(files.CAMERA / "Video.mp4")
-        self.phone.phone_files = {source: (b"identical video", 1), retained: (b"identical video", 2)}
-        folder = self.root / "backup"
-        manifest, approval = files.backup(self.phone, folder, [], [(source, retained)])
-        return source, retained, folder, manifest, approval
+    def test_personal_file_commands_are_rejected_before_opening_adb(self):
+        for command in ("files", "backup-files", "remove-files", "restore-files"):
+            with self.subTest(command=command), patch.object(cli, "Device") as device:
+                with self.assertRaises(SystemExit), redirect_stderr(StringIO()):
+                    cli.main([command])
+                device.assert_not_called()
 
-    def test_backup_remove_retry_and_restore(self):
-        source, retained, _, manifest, approval = self.make_file_backup()
-        with redirect_stderr(StringIO()):
-            self.assertEqual(files.remove(self.phone, manifest, approval)["removed"], [source])
-            self.assertEqual(files.remove(self.phone, manifest, approval)["already_absent"], 1)
-        self.assertIn(retained, self.phone.phone_files)
-        files.restore(self.phone, manifest, json.loads(manifest.read_text()))
-        self.assertEqual(self.phone.phone_files[source][0], self.phone.phone_files[retained][0])
-
-    def test_changed_source_is_put_back_instead_of_deleted(self):
-        source, _, _, manifest, approval = self.make_file_backup()
-        self.phone.change_on_move = source
-        with self.assertRaises(adb.DeviceError):
-            files.remove(self.phone, manifest, approval)
-        self.assertEqual(self.phone.phone_files[source][0], b"newer content")
-        self.assertFalse(self.phone.mutations)
-
-    def test_bad_backup_or_changed_original_prevents_removal(self):
-        source, retained, folder, manifest, approval = self.make_file_backup()
-        entry, = json.loads(manifest.read_text())["entries"]
-        local = folder / entry["backup"]
-        local.write_bytes(b"x" * len(local.read_bytes()))
-        with self.assertRaises(adb.DeviceError):
-            files.remove(self.phone, manifest, approval)
-        local.write_bytes(b"identical video")
-        self.phone.phone_files[retained] = b"unrelated data!", 2
-        with self.assertRaises(adb.DeviceError):
-            files.remove(self.phone, manifest, approval)
-        self.assertIn(source, self.phone.phone_files)
-        self.assertFalse(self.phone.mutations)
-
-    def test_backup_filename_is_portable_and_noninterpretable(self):
-        source = files.DOWNLOAD / r"C:\CON:alt.apk"
-        relative = files.backup_path(source)
-        self.assertEqual(relative.parts[0], "payload")
-        self.assertRegex(relative.name, r"^[a-f0-9]{64}-[a-zA-Z0-9._-]+$")
-        self.assertNotIn("\\", str(relative))
-        self.assertNotIn(":", str(relative))
-
-    def test_adb_pins_transport_and_quotes_path(self):
+    def test_adb_pins_transport_and_quotes_arguments(self):
         inventory = "List of devices attached\nexample:1234 device model:Sample transport_id:7\n"
         with patch.object(adb, "run_adb", side_effect=[inventory.encode(), b"ok"]) as run:
             selected = adb.Device("example:1234")
-            argument = "/storage/emulated/0/Download/Foo ' & $.apk"
-            selected.shell("stat", "--", argument)
+            argument = "Example ' & $ argument"
+            selected.shell("echo", argument)
             args = run.call_args.args
             self.assertEqual(args[:4], ("-t", "7", "shell", "-T"))
-            self.assertEqual(shlex.split(args[4]), ["stat", "--", argument])
+            self.assertEqual(shlex.split(args[4]), ["echo", argument])
 
     def test_frame_delta_rejects_counter_restart(self):
         before = dict(pid=1, window_ns=3, frames=100, janky_frames=2, missed_vsync=1)

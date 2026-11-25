@@ -15,8 +15,8 @@ An unfamiliar package name or a large cache alone is insufficient evidence for a
 ## Open a pull request
 
 1. [Fork the project][fork], clone your fork, and create a branch with `git switch -c describe-your-change`.
-2. Keep changes focused. Update the affected documentation and add a regression test when the change could break parsing, device selection, approval, backup, or rollback.
-3. Run the checks below. For write flows, use fake devices and synthetic files before trying them on a phone. If you tested on hardware, give the model and build and summarize how you verified the outcome.
+2. Keep changes focused. Update the affected documentation and add a regression test when the change could break parsing, device selection, approval, or rollback.
+3. Run the checks below. For write flows, use simulated or disposable devices before trying them on a phone. If you tested on hardware, give the model and build and summarize how you verified the outcome.
 4. Push the branch to your fork and [open a pull request][pulls] against `main`. Describe what changed, what you tested, and what remains unverified. Link an existing issue when there is one.
 
 ```sh
@@ -25,7 +25,7 @@ python -m unittest discover -s tests -v
 git diff --check
 ```
 
-When changing the CLI, keep audit commands read-only and use the existing approval, verified backup, and rollback flows. Keep the MCP tools read-only. If platform-specific behavior prevents verification, report the limit instead of guessing.
+When changing the CLI, keep audit commands read-only and use the existing approval and rollback flows. Keep the MCP tools read-only. If platform-specific behavior prevents verification, report the limit instead of guessing.
 
 Report vulnerabilities privately. [Security reporting](SECURITY.md)
 

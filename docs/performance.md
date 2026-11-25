@@ -55,7 +55,6 @@ Keep both samples in the same battery statistics window. The tool compares on-ba
 
 `diagnose` reports Android's battery health **status** (for example, `good` or `overheat`) and temperature when available. This status is not the percentage of original capacity remaining. No ADB setting can repair a worn cell. A charging limit, if supported, belongs in the manufacturer's Battery settings.
 
-
 ## Review background radio scanning
 
 `cleanyourandroid scan-settings` opens the Android Location services screen for the primary user. Review **Wi-Fi scanning** and **Bluetooth scanning** separately. These controls allow scans even when the corresponding radio appears off; indoor positioning and nearby-device features can depend on them. Opening the screen reads no scan results and changes no switch. If the OEM moves or hides this activity, search Android Settings for “scanning.” Measure standby drain before deciding to keep a change.

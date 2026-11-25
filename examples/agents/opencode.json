@@ -7,7 +7,7 @@
       "command": [
         "uvx",
         "--python", "3.12",
-        "--from", "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@09a2153bd4c812e1ff9ae8a5a3a94f195660060c",
+        "--from", "cleanyourandroid[mcp] @ git+https://github.com/shiv-eshwar/cleanyourandroid.git@c2c5a8c57364e4f410586941dacdc5c67154655f",
         "cleanyourandroid-mcp"
       ]
     }

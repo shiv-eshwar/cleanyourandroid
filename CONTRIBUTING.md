@@ -29,7 +29,7 @@ When changing the CLI, keep audit commands read-only and use the existing approv
 
 CI also boots a disposable Android emulator. It tests settings restoration and compares cache behavior with the image's permissions using a generated app containing only synthetic markers. No personal handset is needed; do not point integration tests at one.
 
-For a new OEM rule, add a matching fixture, a negative case, and the user-visible impact in the OEM guide. Explain why a package is safe to *offer* and whether it should ever appear in the light preset. Never add a wildcard package rule, broad data clear, or personal-file scan.
+For a new OEM rule, add a matching fixture, a negative case, and the user-visible impact in the OEM guide. Explain why a package is safe to *offer* and whether it should ever appear in the light preset. Keep the [critical-package protections](cleanyourandroid/critical.py) independent of proposed removals; preserve license notices for adapted material. Never add a wildcard removal rule, broad data clear, or personal-file scan.
 
 Report vulnerabilities privately. [Security reporting](SECURITY.md)
 

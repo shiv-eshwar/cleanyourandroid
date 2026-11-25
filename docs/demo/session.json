@@ -1,0 +1,101 @@
+[
+  {
+    "stage": "preview",
+    "settings": {
+      "window_animation_scale": "1.0",
+      "transition_animation_scale": "1.0",
+      "animator_duration_scale": "null"
+    },
+    "operations": [
+      {
+        "kind": "setting",
+        "target": "window_animation_scale",
+        "value": "0.5"
+      },
+      {
+        "kind": "setting",
+        "target": "transition_animation_scale",
+        "value": "0.5"
+      },
+      {
+        "kind": "setting",
+        "target": "animator_duration_scale",
+        "value": "0.5"
+      }
+    ],
+    "crop": [
+      0,
+      1256,
+      1080,
+      1765
+    ]
+  },
+  {
+    "stage": "applied",
+    "settings": {
+      "window_animation_scale": "0.5",
+      "transition_animation_scale": "0.5",
+      "animator_duration_scale": "0.5"
+    },
+    "operations": [
+      {
+        "kind": "setting",
+        "target": "window_animation_scale",
+        "value": "0.5",
+        "state": "applied"
+      },
+      {
+        "kind": "setting",
+        "target": "transition_animation_scale",
+        "value": "0.5",
+        "state": "applied"
+      },
+      {
+        "kind": "setting",
+        "target": "animator_duration_scale",
+        "value": "0.5",
+        "state": "applied"
+      }
+    ],
+    "crop": [
+      0,
+      1257,
+      1080,
+      1766
+    ]
+  },
+  {
+    "stage": "restored",
+    "settings": {
+      "window_animation_scale": "1.0",
+      "transition_animation_scale": "1.0",
+      "animator_duration_scale": "null"
+    },
+    "operations": [
+      {
+        "kind": "setting",
+        "target": "window_animation_scale",
+        "value": "0.5",
+        "state": "restored"
+      },
+      {
+        "kind": "setting",
+        "target": "transition_animation_scale",
+        "value": "0.5",
+        "state": "restored"
+      },
+      {
+        "kind": "setting",
+        "target": "animator_duration_scale",
+        "value": "0.5",
+        "state": "restored"
+      }
+    ],
+    "crop": [
+      0,
+      1253,
+      1080,
+      1762
+    ]
+  }
+]

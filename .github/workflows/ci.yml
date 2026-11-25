@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,4 +46,14 @@ jobs:
           arch: x86_64
           avd-name: cleanandroid-ci
           disable-animations: false
-          script: bash tests/integration/emulator.sh
+          script: |
+            bash tests/integration/emulator.sh
+            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then python -m pip install . && python docs/demo/capture.py; fi
+      - name: Save emulator screenshots and selected CLI output for the README
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: readme-demo
+          path: ${{ runner.temp }}/readme-demo/
+          retention-days: 3
+          if-no-files-found: error

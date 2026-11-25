@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import audit as reporting
-from . import dns, oem, plan
+from . import comparison, dns, oem, plan
 from .adb import Device, DeviceError, devices, package_name
 
 
@@ -35,6 +35,10 @@ def parser():
         sub = commands.add_parser(name, help=f"Calculate the delta between two {name[8:]} snapshots")
         sub.add_argument("before", type=Path)
         sub.add_argument("after", type=Path)
+    sub = commands.add_parser("compare-audits", help="Compare saved audits offline without exposing package names")
+    sub.add_argument("before", type=Path)
+    sub.add_argument("after", type=Path)
+    sub.add_argument("--html", type=Path, help="Save a standalone comparison to a new HTML file")
     sub = commands.add_parser("plan", help="Preview explicit package and performance changes")
     target(sub)
     sub.add_argument("--out", type=Path, required=True)
@@ -98,6 +102,11 @@ def execute(args):
     command = args.command
     if command == "devices":
         return devices()
+    if command == "compare-audits":
+        result = comparison.compare(read_json(args.before), read_json(args.after))
+        if args.html:
+            plan.create_bytes(args.html, comparison.html_report(result).encode("utf-8"))
+        return result
     if command in {"compare-frames", "compare-standby"}:
         before, after = (read_json(path) for path in (args.before, args.after))
         if before["connection"] != after["connection"]:
@@ -109,7 +118,10 @@ def execute(args):
         return reporting.frame_delta(before["graphics"], after["graphics"])
     device = Device(args.serial)
     if command == "audit":
-        return reporting.audit(device)
+        result = reporting.audit(device)
+        if args.out:
+            result["comparison_key"] = comparison.capture_key(device)
+        return result
     if command == "ads":
         return reporting.ads_report(device)
     if command == "diagnose":

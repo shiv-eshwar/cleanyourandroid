@@ -67,6 +67,19 @@ Use the options below with `cleanyourandroid plan … --out .cyandroid/NAME.json
 
 **When cache clearing is unavailable:** check `cache_only_supported` in the audit. Some phones advertise cache clearing but deny ADB the required permission. Run `cleanyourandroid cache-settings PACKAGE` to open that app's info screen, then choose **Storage → Clear cache** yourself. **Clear storage / Clear data** erases app data. The CLI never uses it as a fallback. Apps can rebuild cache, use network data, and load more slowly after clearing; target storage pressure rather than clearing on a schedule.
 
+## Measure the result
+
+Save one audit before maintenance and another afterward, on the same phone and firmware. Run the comparison after disconnecting if you like:
+
+```sh
+cleanyourandroid audit --out .cyandroid/before.json
+# Apply your reviewed changes and repeat the activity you want to measure.
+cleanyourandroid audit --out .cyandroid/after.json
+cleanyourandroid compare-audits .cyandroid/before.json .cyandroid/after.json --html .cyandroid/report.html
+```
+
+The comparison prints JSON and can write a local HTML table. It exports only timestamps, free storage, available memory, and package counts; it omits app names, device identifiers, and network settings. Missing readings are `null` in JSON and appear as a dash in HTML. These snapshots cannot prove faster launches or longer battery life. For those questions, use the frame and standby comparisons in the [performance guide](docs/performance.md).
+
 ## What to expect on your phone
 
 | Phone | Where to start |
@@ -90,4 +103,4 @@ Reports stay on the computer that runs the CLI. They can contain installed packa
 
 [Contributing](CONTRIBUTING.md) · [Report a device result](https://github.com/shiv-eshwar/cleanyourandroid/issues/new?template=device-report.yml) · [Report a security issue privately](SECURITY.md) · [Changelog](CHANGELOG.md). A useful compatibility report names the model and firmware, the feature tested, and whether restore worked. Please leave device identifiers and personal content out.
 
-Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv). CleanYourAndroid is an independent project.
+Inspired by [CleanYourTV](https://github.com/Gathin23/cleanyourtv). The critical-package identifiers and protection patterns were adapted from [Shibakaa/cleanyourdroid](https://github.com/Shibakaa/cleanyourdroid/tree/6234b0b054d86f348b5fcb2f87fe4b04290e6f79) under [its MIT license](LICENSES/cleanyourdroid-MIT.txt). Its before/after reports inspired the offline comparison. CleanYourAndroid is an independent project.

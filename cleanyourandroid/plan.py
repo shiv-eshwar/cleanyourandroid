@@ -18,10 +18,14 @@ def json_bytes(value):
 
 
 def create_json(path, value):
+    create_bytes(path, json_bytes(value))
+
+
+def create_bytes(path, data):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(fd, "wb") as stream:
-            stream.write(json_bytes(value))
+            stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
     except OSError:

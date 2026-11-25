@@ -10,7 +10,7 @@ cli() { local command=$1; shift; python -m cleanyourandroid "$command" --serial 
 
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
-cli audit > "$work/audit.json"
+cli audit --out "$work/audit.json" > /dev/null
 jq -e '.volume.total_bytes > 0 and (.settings | has("window_animation_scale"))' "$work/audit.json"
 cli ads > "$work/ads.json"
 jq -e '.candidates | type == "array"' "$work/ads.json"
@@ -24,6 +24,10 @@ for key in "${keys[@]:0:3}"; do [[ $(device shell settings get global "$key") ==
 [[ $(device shell settings get global low_power_trigger_level) == 20 ]]
 cli restore "$work/journal"
 for key in "${keys[@]}"; do device shell settings get global "$key" | diff - "$work/$key"; done
+cli audit --out "$work/after.json" > /dev/null
+python -m cleanyourandroid compare-audits "$work/audit.json" "$work/after.json" --html "$work/report.html" |
+  jq -e '.measurements[] | select(.metric == "Free storage") | (.change | type) == "number"'
+test -s "$work/report.html"
 
 # Install a fresh no-code app. The two markers belong only to this fixture.
 pkg=org.example.cleanyourandroidfixture

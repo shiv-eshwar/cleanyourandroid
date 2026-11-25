@@ -22,6 +22,14 @@ HEALTH = {1: "unknown", 2: "good", 3: "overheat", 4: "dead", 5: "over_voltage",
           6: "unspecified_failure", 7: "cold"}
 
 
+def optional_output(device, *words, **kwargs):
+    """Some OEMs omit individual diagnostic services. Never use this for writes."""
+    try:
+        return device.shell(*words, **kwargs)
+    except DeviceError:
+        return ""
+
+
 def cache_only_supported(device):
     # Require both flags on the clear command itself, not somewhere else in pm help.
     try:
@@ -79,11 +87,12 @@ def large_caches(device, min_mib):
 
 
 def core_snapshot(device):
-    battery = device.shell("dumpsys", "battery")
-    thermal = device.shell("dumpsys", "thermalservice")
-    mem = device.shell("cat", "/proc/meminfo")
-    power = device.shell("dumpsys", "power")
-    display = device.shell("dumpsys", "display")
+    battery = optional_output(device, "dumpsys", "battery")
+    thermal = optional_output(device, "dumpsys", "thermalservice")
+    mem = optional_output(device, "cat", "/proc/meminfo")
+    power = optional_output(device, "dumpsys", "power")
+    display = optional_output(device, "dumpsys", "display")
+    sources = re.findall(r"^\s*(?:AC|USB|Wireless|Dock) powered: (true|false)\s*$", battery, re.M)
     temp = re.search(r"^\s*temperature: (-?\d+)", battery, re.M)
     health = re.search(r"^\s*health: (\d+)\s*$", battery, re.M)
     level = re.search(r"^\s*level: (\d+)", battery, re.M)
@@ -99,13 +108,13 @@ def core_snapshot(device):
         "battery_health_status": HEALTH.get(int(health[1]), "unknown") if health else None,
         "thermal_status": int(status[1]) if status else None,
         "memory_available_bytes": int(memory[1]) * 1024 if memory else None,
-        "external_power": bool(re.search(r"^\s*(?:AC|USB|Wireless|Dock) powered: true", battery, re.M)),
+        "external_power": "true" in sources if sources else None,
         "battery_saver": next((line.partition(": ")[2] for line in power.splitlines()
                                if "Battery Saver is currently:" in line), None),
         "low_power_render_limit_fps": float(cap[1]) if cap else None,
         "active_render_fps": float(render[1]) if render else None,
         "launch_boost_disabled": launch[1] == "true" if launch else None,
-        "settings": {key: device.shell("settings", "get", "global", key) for key in SETTINGS},
+        "settings": {key: optional_output(device, "settings", "get", "global", key) or None for key in SETTINGS},
     }
 
 
@@ -152,9 +161,9 @@ def diagnostic_report(device):
             "manufacturer": "ro.product.manufacturer", "model": "ro.product.model",
             "android": "ro.build.version.release", "build": "ro.build.display.id",
         }.items()},
-        "volume": data_volume(device.shell("df", "-k", "/data")),
+        "volume": data_volume(optional_output(device, "df", "-k", "/data")),
         **core_snapshot(device),
-        "recent_cpu": cpu_processes(device.shell("dumpsys", "cpuinfo")),
+        "recent_cpu": cpu_processes(optional_output(device, "dumpsys", "cpuinfo")),
     }
 
 
@@ -162,7 +171,8 @@ def audit(device):
     disabled = packages(device, "-d")
     system = packages(device, "-s")
     user = packages(device, "-3")
-    stats = disk_stats(device.shell("dumpsys", "diskstats", timeout=45))
+    stats = disk_stats(optional_output(device, "dumpsys", "diskstats", timeout=45))
+    candidates, note = oem.candidate_review(device)
     return {
         **diagnostic_report(device),
         "profile": "Primary user (0)",
@@ -173,7 +183,8 @@ def audit(device):
         ][:15],
         "cache_note": "Android's cached estimates. Data bytes include cache. Profile attribution can vary by build.",
         "cache_only_supported": cache_only_supported(device),
-        "disable_candidates": [row for row in oem.verified_candidates(device) if row["disable_allowed"]],
+        "disable_candidates": [row for row in candidates if row["disable_allowed"]],
+        "package_checks_note": note,
     }
 
 

@@ -38,6 +38,8 @@ def parser():
     sub = commands.add_parser("plan", help="Preview explicit package and performance changes")
     target(sub)
     sub.add_argument("--out", type=Path, required=True)
+    sub.add_argument("--light", action="store_true",
+                     help="Preview shorter transitions and eligible dedicated OEM ad services")
     sub.add_argument("--disable-aura", action="store_true", help="Alias for --disable-package com.aura.oobe.solutions")
     sub.add_argument("--disable-package", action="append", default=[], choices=oem.RULES,
                      help="Disable one verified optional OEM package, preserving its data")
@@ -126,7 +128,7 @@ def execute(args):
         }
     if command == "plan":
         rows = operations(args, device)
-        approval = plan.create_plan(device, rows, args.out)
+        approval = plan.create_plan(device, rows, args.out, light=args.light)
         return {"plan": str(args.out), "approval_sha256": approval, **read_json(args.out)}
     if command == "cache-settings":
         package = package_name(args.package)

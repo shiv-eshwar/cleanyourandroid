@@ -18,6 +18,7 @@ class Rule:
     impact: str
     markers: tuple[str, ...]
     is_store: bool = False
+    ad_service: bool = False
 
 
 RULES = {
@@ -39,15 +40,15 @@ RULES = {
     "com.miui.msa.global": Rule(
         "xiaomi", "Xiaomi System Ads (global)", "Supplies recommendations on some MIUI and HyperOS builds.",
         "Some OEM apps may lose promotions or sponsored content. Check the apps you use after disabling.",
-        ("/MSA-Global/", "/MsaGlobal/", "com.miui.systemAdSolution.", "com.miui.msa.global.")),
+        ("/MSA-Global/", "/MsaGlobal/", "com.miui.systemAdSolution.", "com.miui.msa.global."), ad_service=True),
     "com.miui.systemAdSolution": Rule(
         "xiaomi", "Xiaomi System Ads", "Regional Xiaomi system advertising component.",
         "Some OEM apps may lose recommendations. Other ad surfaces have their own controls.",
-        ("/SystemAdSolution/", "/MSA/", "com.miui.systemAdSolution.")),
+        ("/SystemAdSolution/", "/MSA/", "com.miui.systemAdSolution."), ad_service=True),
     "com.opos.ads": Rule(
         "oppo", "OPPO advertising service", "Advertising component on some ColorOS builds.",
         "OEM app promotions may change. Check the apps and store features you rely on.",
-        ("com.opos.ads.", "/OppoAds/", "/OposAds/")),
+        ("com.opos.ads.", "/OppoAds/", "/OposAds/"), ad_service=True),
     "com.netflix.mediaclient": Rule(
         None, "Netflix", "Optional streaming app when supplied as a system preinstall.",
         "Netflix and its downloads will be inaccessible until you restore the app.",
@@ -180,11 +181,19 @@ def review_apps(device, known):
 
 def report(device):
     brand = manufacturer(device)
-    verified = verified_candidates(device)
+    verified, note = candidate_review(device)
     return {
         "manufacturer": brand,
         "candidates": verified,
+        "package_checks_note": note,
         "declared_preinstalled_apps_for_manual_review": review_apps(device, {row["package"] for row in verified}),
         "manual_review_note": "Inventory only. System apps can be essential or provide updates.",
         "recommendation_controls_to_check": OEM_AD_CONTROLS.get(brand, []),
     }
+
+
+def candidate_review(device):
+    try:
+        return verified_candidates(device, strict=True), None
+    except DeviceError:
+        return [], "Package protection checks were unavailable. No package changes are suggested."

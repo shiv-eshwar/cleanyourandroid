@@ -192,6 +192,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNone(audit.core_snapshot(device)["battery_health_status"])
         self.assertIsNone(audit.data_volume(""))
 
+    def test_missing_oem_services_do_not_hide_available_readings(self):
+        def limited(*words):
+            if words == ("dumpsys", "battery"):
+                return "level: 82\nUSB powered: false"
+            raise adb.DeviceError("service unavailable")
+        report = audit.core_snapshot(Mock(shell=limited))
+        self.assertEqual(report["battery_level"], 82)
+        self.assertIs(report["external_power"], False)
+        self.assertIsNone(report["thermal_status"])
+        self.assertIsNone(report["settings"][audit.SAVER])
+
     def test_personal_file_commands_are_rejected_before_opening_adb(self):
         for command in ("files", "backup-files", "remove-files", "restore-files"):
             with self.subTest(command=command), patch.object(cli, "Device") as device:

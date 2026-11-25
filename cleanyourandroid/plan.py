@@ -138,9 +138,34 @@ def check_operations(operations):
         targets.add(target)
 
 
-def create_plan(device, operations, path):
+def light_operations(device, explicit):
+    """Choose reversible actions only. Never increase a user's motion settings."""
+    chosen = {op["target"] for op in explicit}
+    extra, observed = [], {}
+    for key in ANIMATIONS:
+        if key in chosen:
+            continue
+        before = before_value(device, "setting", key)
+        if before == "null" or (re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,9})?", before) and float(before) > 0.5):
+            extra.append(dict(kind="setting", target=key, value="0.5"))
+            observed[key] = before
+    candidates, _ = oem.candidate_review(device)
+    for row in candidates:
+        name = row["package"]
+        if name not in chosen and row["disable_allowed"] and oem.RULES[name].ad_service:
+            extra.append(dict(kind="disable", target=name, value=3))
+    return extra, observed
+
+
+def create_plan(device, operations, path, *, light=False):
     if not device.is_owner_active():
         raise DeviceError("Switch to the primary Android user before preparing changes.")
+    selected_from = {}
+    if light:
+        extra, selected_from = light_operations(device, operations)
+        operations = [*operations, *extra]
+        if not operations:
+            raise DeviceError("No eligible changes for the light preset. No plan was written.")
     check_operations(operations)
     payload = {
         "version": 1, "device_id": device.identity(),
@@ -149,6 +174,8 @@ def create_plan(device, operations, path):
     verify_plan(device, payload, payload["device_id"])
     payload["observed"] = {op["target"]: before_value(device, op["kind"], op["target"])
                            for op in operations if op["kind"] != "cache"}
+    if any(payload["observed"][key] != prior for key, prior in selected_from.items()):
+        raise DeviceError("Motion settings changed during preview. Create a new plan.")
     for op in operations:
         verify_prior(op, payload["observed"].get(op["target"]))
     payload["review_notes"] = {op["target"]: review_note(op) for op in operations}

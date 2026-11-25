@@ -174,6 +174,32 @@ class OEMTests(unittest.TestCase):
                 plan.create_plan(phone, [dict(kind=kind, target=phone.package, value=value)], self.source)
         self.assertFalse(phone.mutations)
 
+    def test_light_preset_protects_reduced_motion_and_only_disables_ad_services(self):
+        phone = Phone("Xiaomi", "com.miui.msa.global")
+        phone.settings.update(window_animation_scale="0", animator_duration_scale="0.25",
+                              transition_animation_scale="1.5")
+        digest = plan.create_plan(phone, [], self.source, light=True)
+        self.assertFalse(phone.mutations)
+        self.assertEqual(json.loads(self.source.read_bytes())["operations"], [
+            dict(kind="setting", target="transition_animation_scale", value="0.5"),
+            dict(kind="disable", target=phone.package, value=3)])
+        earlier = dict(phone.settings)
+        plan.apply(phone, self.source, digest, self.journal)
+        self.assertEqual(phone.enabled, 3)
+        plan.restore(phone, self.journal)
+        self.assertEqual(phone.settings, earlier)
+        self.assertEqual(phone.enabled, 0)
+
+    def test_light_preset_with_no_work_keeps_store_and_does_not_create_empty_plan(self):
+        for brand, app in (("vivo", "com.vivo.appstore"), ("Other", "com.netflix.mediaclient")):
+            phone = Phone(brand, app)
+            phone.settings.update(window_animation_scale="0", animator_duration_scale="0.5",
+                                  transition_animation_scale="unknown")
+            with self.assertRaisesRegex(adb.DeviceError, "No eligible changes"):
+                plan.create_plan(phone, [], self.source, light=True)
+            self.assertFalse(self.source.exists())
+            self.assertFalse(phone.mutations)
+
     def test_updated_preinstall_can_be_disabled_but_not_removed(self):
         phone = Phone()
         phone.code_path = "/data/app/update/base.apk"

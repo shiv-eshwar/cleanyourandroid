@@ -46,3 +46,11 @@ cleanyourandroid compare-standby .cyandroid/idle-before.json .cyandroid/idle-aft
 ```
 
 Keep both samples in the same battery statistics window. The tool compares on-battery screen-off time, awake time, and Wi-Fi wakeup counts when the device reports them. Short intervals may produce too little discharge to measure reliably. An absent counter means Android did not report it.
+
+## Shorten animations or schedule Battery Saver
+
+`plan --animation-scale 0.5` shortens Android's window, transition and animator durations. Use `1` for standard duration or `0` for no animation. Each scale gets its own journal entry, so restore can recover mixed values or remove a setting that was previously unset. These global settings affect other users too. Keep reduced motion if you prefer it. Shorter transitions change how quickly an interaction feels complete; they do not increase the panel's refresh rate or cure dropped frames.
+
+`plan --battery-saver-at 20` sets the percentage trigger on builds using Android's percentage schedule. An earlier trigger can reduce background work and may also slow rendering. The CLI refuses to replace a different scheduling mode. Some OEMs have their own battery manager: verify the schedule in Settings. Use the standby comparison above to measure runtime changes.
+
+`diagnose` reports Android's battery health **status** (for example, `good` or `overheat`) and temperature when available. This status is not the percentage of original capacity remaining. No ADB setting can repair a worn cell. A charging limit, if supported, belongs in the manufacturer's Battery settings.

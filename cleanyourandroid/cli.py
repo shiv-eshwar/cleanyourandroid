@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import audit as reporting
 from . import dns, oem, plan
-from .adb import Device, DeviceError, devices
+from .adb import Device, DeviceError, devices, package_name
 
 
 def target(parser):
@@ -28,6 +28,9 @@ def parser():
     target(sub)
     sub.add_argument("package")
     sub.add_argument("--out", type=Path)
+    sub = commands.add_parser("cache-settings", help="Open App info so you can clear cache on the phone")
+    target(sub)
+    sub.add_argument("package")
     for name in ("compare-frames", "compare-standby"):
         sub = commands.add_parser(name, help=f"Calculate the delta between two {name[8:]} snapshots")
         sub.add_argument("before", type=Path)
@@ -41,9 +44,17 @@ def parser():
     sub.add_argument("--remove-preinstall", action="append", default=[], choices=oem.RULES,
                      help="Remove a verified base-image package for primary user 0 and keep its data")
     sub.add_argument("--private-dns", metavar="HOSTNAME", help="Use an explicitly selected DNS-over-TLS resolver")
-    sub.add_argument("--disable-auto-saver", action="store_true")
+    saver = sub.add_mutually_exclusive_group()
+    saver.add_argument("--disable-auto-saver", action="store_true")
+    saver.add_argument("--battery-saver-at", choices=reporting.SAVER_LEVELS, metavar="{15,20,25}",
+                       help="Set the automatic Battery Saver percentage trigger")
+    sub.add_argument("--animation-scale", choices=reporting.SCALES,
+                     help="Set all three system animation duration scales")
     sub.add_argument("--disable-always-on-mobile-data", action="store_true")
-    sub.add_argument("--clear-cache", action="append", default=[], choices=reporting.CACHE_TARGETS)
+    sub.add_argument("--clear-cache", action="append", default=[], metavar="PACKAGE",
+                     help="Clear only this installed app's cache for user 0 (repeatable)")
+    sub.add_argument("--clear-cache-above-mib", type=int, metavar="MIB",
+                     help="Preview third-party app caches estimated at or above this size")
     sub = commands.add_parser("apply", help="Apply a reviewed plan and save a rollback journal")
     target(sub)
     sub.add_argument("plan", type=Path)
@@ -55,7 +66,7 @@ def parser():
     return root
 
 
-def operations(args):
+def operations(args, device):
     rows = []
     disabled = [*args.disable_package, *([oem.AURA] if args.disable_aura else [])]
     rows.extend(dict(kind="disable", target=package, value=3) for package in disabled)
@@ -64,9 +75,16 @@ def operations(args):
         rows.append(dict(kind="dns", target="private_dns", value=dns.hostname(args.private_dns)))
     if args.disable_auto_saver:
         rows.append(dict(kind="setting", target=reporting.SAVER, value="0"))
+    elif args.battery_saver_at:
+        rows.append(dict(kind="setting", target=reporting.SAVER, value=args.battery_saver_at))
+    if args.animation_scale is not None:
+        rows.extend(dict(kind="setting", target=key, value=args.animation_scale) for key in reporting.ANIMATIONS)
     if args.disable_always_on_mobile_data:
         rows.append(dict(kind="setting", target=reporting.CELLULAR, value="0"))
-    rows.extend(dict(kind="cache", target=package, value=None) for package in args.clear_cache)
+    caches = list(args.clear_cache)
+    if args.clear_cache_above_mib is not None:
+        caches.extend(reporting.large_caches(device, args.clear_cache_above_mib))
+    rows.extend(dict(kind="cache", target=package, value=None) for package in dict.fromkeys(caches))
     return rows
 
 
@@ -107,9 +125,16 @@ def execute(args):
             "graphics": reporting.frame_stats(device, args.package),
         }
     if command == "plan":
-        rows = operations(args)
+        rows = operations(args, device)
         approval = plan.create_plan(device, rows, args.out)
         return {"plan": str(args.out), "approval_sha256": approval, **read_json(args.out)}
+    if command == "cache-settings":
+        package = package_name(args.package)
+        if not device.is_owner_active() or package not in oem.packages(device):
+            raise DeviceError("Select an installed package while the primary Android user is active.")
+        device.shell("am", "start", "--user", "0", "-a", "android.settings.APPLICATION_DETAILS_SETTINGS",
+                     "-d", "package:" + package)
+        return {"package": package, "next": "In App info, open Storage and choose Clear cache. Leave Clear storage/data alone."}
     if command == "apply":
         return {"journal": str(args.journal), "operations": plan.apply(device, args.plan, args.approve, args.journal)}
     if command == "restore":

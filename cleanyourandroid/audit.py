@@ -1,6 +1,5 @@
 """Summarize what Android reports without collecting raw bug reports."""
 
-from collections import Counter
 from datetime import datetime, timezone
 import json
 import re
@@ -11,16 +10,31 @@ from .oem import packages
 
 SAVER = "low_power_trigger_level"
 CELLULAR = "mobile_data_always_on"
+ANIMATIONS = ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+SCALES = ("0", "0.5", "1")
+SAVER_LEVELS = ("15", "20", "25")
 SETTINGS = {
-    SAVER: "Automatic Battery Saver percentage. A value of 0 disables the percentage trigger.",
+    SAVER: "Battery Saver percentage trigger. Earlier activation may extend runtime and reduce performance; 0 disables this trigger.",
     CELLULAR: "Keep a cellular data session active on Wi-Fi. A value of 0 allows it to close.",
+    **dict.fromkeys(ANIMATIONS, "Device-wide animation duration: 0 turns motion off, 0.5 shortens it, 1 is standard."),
 }
-CACHE_TARGETS = {
-    "com.android.vending": "Google Play Store",
-    "com.android.chrome": "Chrome",
-    "com.google.android.apps.photos": "Google Photos",
-    "com.nothing.gallery": "Nothing Gallery",
-}
+HEALTH = {1: "unknown", 2: "good", 3: "overheat", 4: "dead", 5: "over_voltage",
+          6: "unspecified_failure", 7: "cold"}
+
+
+def cache_only_supported(device):
+    # Require both flags on the clear command itself, not somewhere else in pm help.
+    try:
+        advertised = any(re.fullmatch(r"\s*clear (?:\[--user USER_ID\] \[--cache-only\]|"
+                                      r"\[--cache-only\] \[--user USER_ID\]) PACKAGE\s*", line)
+                         for line in device.shell("pm", "help").splitlines())
+        # AOSP silently ignores the older DELETE_CACHE_FILES permission; the
+        # command may hang even on builds whose help advertises --cache-only.
+        return advertised and bool(re.search(
+            r"^\s*android\.permission\.INTERNAL_DELETE_CACHE_FILES: granted=true\b",
+            device.shell("dumpsys", "package", "com.android.shell"), re.M))
+    except DeviceError:
+        return False
 
 
 def disk_stats(raw):
@@ -45,8 +59,23 @@ def disk_stats(raw):
 
 
 def data_volume(raw):
-    fields = raw.splitlines()[-1].split()
-    return dict(total_bytes=int(fields[1]) * 1024, free_bytes=int(fields[3]) * 1024)
+    for line in reversed(raw.splitlines()):
+        fields = line.split()
+        if len(fields) >= 4 and fields[1].isdecimal() and fields[3].isdecimal():
+            return dict(total_bytes=int(fields[1]) * 1024, free_bytes=int(fields[3]) * 1024)
+    return None
+
+
+def large_caches(device, min_mib):
+    if min_mib < 1:
+        raise DeviceError("The cache threshold must be at least 1 MiB.")
+    installed = packages(device, "-3")
+    stats = disk_stats(device.shell("dumpsys", "diskstats", timeout=45))
+    selected = sorted({row["package"] for row in stats if row["package"] in installed
+                       and row["cache_bytes"] >= min_mib * 1024**2})
+    if not selected:
+        raise DeviceError("No matching third-party cache estimate. Review audit or name an installed app explicitly.")
+    return selected
 
 
 def core_snapshot(device):
@@ -55,7 +84,8 @@ def core_snapshot(device):
     mem = device.shell("cat", "/proc/meminfo")
     power = device.shell("dumpsys", "power")
     display = device.shell("dumpsys", "display")
-    temp = re.search(r"^\s*temperature: (\d+)", battery, re.M)
+    temp = re.search(r"^\s*temperature: (-?\d+)", battery, re.M)
+    health = re.search(r"^\s*health: (\d+)\s*$", battery, re.M)
     level = re.search(r"^\s*level: (\d+)", battery, re.M)
     status = re.search(r"^Thermal Status: (\d+)", thermal, re.M)
     memory = re.search(r"^MemAvailable:\s+(\d+) kB", mem, re.M)
@@ -66,6 +96,7 @@ def core_snapshot(device):
     return {
         "battery_level": int(level[1]) if level else None,
         "battery_celsius": int(temp[1]) / 10 if temp else None,
+        "battery_health_status": HEALTH.get(int(health[1]), "unknown") if health else None,
         "thermal_status": int(status[1]) if status else None,
         "memory_available_bytes": int(memory[1]) * 1024 if memory else None,
         "external_power": bool(re.search(r"^\s*(?:AC|USB|Wireless|Dock) powered: true", battery, re.M)),
@@ -141,6 +172,7 @@ def audit(device):
             for row in stats if row["package"] in system | user
         ][:15],
         "cache_note": "Android's cached estimates. Data bytes include cache. Profile attribution can vary by build.",
+        "cache_only_supported": cache_only_supported(device),
         "disable_candidates": [row for row in oem.verified_candidates(device) if row["disable_allowed"]],
     }
 

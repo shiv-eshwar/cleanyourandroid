@@ -22,45 +22,40 @@ def shell(*args):
     return adb("shell", *args).decode().strip()
 
 
-def capture_screen(folder, stage, expected):
+def capture_screen(folder, stage):
     shell("am", "force-stop", "com.android.settings")
     shell("am", "start", "-W", "-a", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
           "-p", "com.android.settings", "--es", ":settings:fragment_args_key", KEYS[0])
-    last_text = []
-    for _ in range(28):
+    for _ in range(36):
         shell("uiautomator", "dump", "/data/local/tmp/cya-demo.xml")
         root = ET.fromstring(adb("shell", "cat", "/data/local/tmp/cya-demo.xml"))
-        last_text = [n.get("text") for n in root.iter("node") if n.get("text")]
-        titles = {n.get("text"): n for n in root.iter("node") if n.get("text") in LABELS}
-        parents = {child: parent for parent in root.iter() for child in parent}
-        boxes = []
-        for label in LABELS:
-            if label not in titles:
-                break
-            item = titles[label]
-            summary = []
-            while item in parents:
-                item = parents[item]
-                if sum(n.get("text") in LABELS for n in item.iter()) > 1:
-                    break
-                summary = [n for n in item.iter("node") if re.search(expected, n.get("text", "").lower())]
-                if summary:
-                    break
-            if not summary:
-                break
-            boxes.extend(int(v) for n in (titles[label], *summary)
-                         for v in re.findall(r"\d+", n.get("bounds"))[1::2])
+        nodes = [(n.get("text", "") + " " + n.get("content-desc", ""), n.get("bounds", ""))
+                 for n in root.iter("node")]
+        # Settings can expose title and summary as one accessibility node or
+        # two independent nodes. Use only the title geometry for framing.
+        labels = {}
+        for text, bounds in nodes:
+            for label in LABELS:
+                if label.casefold() in text.casefold():
+                    coords = list(map(int, re.findall(r"\d+", bounds)))
+                    if len(coords) == 4:
+                        labels[label] = coords
+        print(stage, "visible:", list(labels), flush=True)
+        if len(labels) == 3:
+            first, middle, last = [labels[label] for label in LABELS]
+            bottom = last[1] + (last[1] - middle[1]) - 8
+            if first[1] >= 230 and bottom <= 1860:
+                (folder / f"{stage}.png").write_bytes(adb("exec-out", "screencap", "-p"))
+                return [0, first[1] - 16, 1080, bottom]
+            move = -200 if first[1] < 230 else 200
+        elif LABELS[-1] in labels and LABELS[0] not in labels:
+            move = -280
+        elif labels:
+            move = 280
         else:
-            (folder / f"{stage}.png").write_bytes(adb("exec-out", "screencap", "-p"))
-            return [0, max(0, min(boxes) - 14), 1080, min(1920, max(boxes) + 14)]
-        # Slow swipes keep the three neighboring preferences together.
-        if LABELS[0] in titles and LABELS[-1] not in titles:
-            shell("input", "swipe", "500", "1250", "500", "950", "380")
-        elif LABELS[-1] in titles and LABELS[0] not in titles:
-            shell("input", "swipe", "500", "900", "500", "1200", "380")
-        else:
-            shell("input", "swipe", "500", "1520", "500", "760", "400")
-    raise RuntimeError(f"Could not verify all three native Settings rows for {stage}: {last_text}")
+            move = 720
+        shell("input", "swipe", "500", "1200", "500", str(1200 - move), "750")
+    raise RuntimeError(f"Could not frame Android Settings for {stage}")
 
 
 def main():
@@ -93,7 +88,7 @@ def main():
             stages.append({"stage": name, "settings": current,
                            "operations": [{k: op[k] for k in ("kind", "target", "value", "state") if k in op}
                                           for op in rows],
-                           "crop": capture_screen(output, name, r"(?<![\d.])1(?:\.0)?\s*[x×]" if expected == 1 else r"0?\.5\s*[x×]")})
+                           "crop": capture_screen(output, name)})
         record("preview", plan["operations"], 1)
         try:
             applied = cli("apply", "plan.json", "--approve", plan["approval_sha256"], "--journal", "journal.json")

@@ -26,18 +26,27 @@ def capture_screen(folder, stage, expected):
     shell("am", "force-stop", "com.android.settings")
     shell("am", "start", "-W", "-a", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
           "-p", "com.android.settings", "--es", ":settings:fragment_args_key", KEYS[0])
+    last_text = []
     for _ in range(28):
         shell("uiautomator", "dump", "/data/local/tmp/cya-demo.xml")
         root = ET.fromstring(adb("shell", "cat", "/data/local/tmp/cya-demo.xml"))
+        last_text = [n.get("text") for n in root.iter("node") if n.get("text")]
         titles = {n.get("text"): n for n in root.iter("node") if n.get("text") in LABELS}
         parents = {child: parent for parent in root.iter() for child in parent}
         boxes = []
         for label in LABELS:
             if label not in titles:
                 break
-            item = parents[titles[label]]
-            summary = [n for n in item.iter("node") if "summary" in n.get("resource-id", "")]
-            if not summary or not any(str(expected) in n.get("text", "").replace(".5x", "0.5x") for n in summary):
+            item = titles[label]
+            summary = []
+            while item in parents:
+                item = parents[item]
+                if sum(n.get("text") in LABELS for n in item.iter()) > 1:
+                    break
+                summary = [n for n in item.iter("node") if re.search(expected, n.get("text", "").lower())]
+                if summary:
+                    break
+            if not summary:
                 break
             boxes.extend(int(v) for n in (titles[label], *summary)
                          for v in re.findall(r"\d+", n.get("bounds"))[1::2])
@@ -51,7 +60,7 @@ def capture_screen(folder, stage, expected):
             shell("input", "swipe", "500", "900", "500", "1200", "380")
         else:
             shell("input", "swipe", "500", "1520", "500", "760", "400")
-    raise RuntimeError(f"Could not verify all three native Settings rows for {stage}")
+    raise RuntimeError(f"Could not verify all three native Settings rows for {stage}: {last_text}")
 
 
 def main():
@@ -74,13 +83,17 @@ def main():
         stages = []
         def record(name, rows, expected):
             current = {k: shell("settings", "get", "global", k) for k in KEYS}
-            if not all(float(v) == expected for v in current.values()):
+            if expected == 1:
+                valid = current == plan["observed"]
+            else:
+                valid = all(v == "0.5" for v in current.values())
+            if not valid:
                 raise RuntimeError(f"Unexpected state in {name}")
             # Never export device IDs, approval digests, package inventories or raw audits.
             stages.append({"stage": name, "settings": current,
                            "operations": [{k: op[k] for k in ("kind", "target", "value", "state") if k in op}
                                           for op in rows],
-                           "crop": capture_screen(output, name, "1x" if expected == 1 else "0.5")})
+                           "crop": capture_screen(output, name, r"(?<![\d.])1(?:\.0)?\s*[x×]" if expected == 1 else r"0?\.5\s*[x×]")})
         record("preview", plan["operations"], 1)
         try:
             applied = cli("apply", "plan.json", "--approve", plan["approval_sha256"], "--journal", "journal.json")

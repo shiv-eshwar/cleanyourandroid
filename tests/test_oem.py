@@ -101,13 +101,43 @@ class OEMTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_candidates_are_detected_on_matching_oppo_and_vivo(self):
-        for brand, package in (("OPPO", "com.heytap.market"), ("vivo", "com.vivo.appstore")):
+    def test_candidates_are_detected_on_matching_manufacturers(self):
+        for brand, package in (
+            ("OPPO", "com.heytap.market"), ("OPPO", "com.opos.ads"),
+            ("vivo", "com.vivo.appstore"), ("vivo", "com.bbk.appstore"),
+            ("Xiaomi", "com.miui.msa.global"), ("Redmi", "com.miui.systemAdSolution"),
+            ("POCO", "com.miui.msa.global"),
+        ):
             phone = Phone(brand, package)
             candidate, = oem.verified_candidates(phone)
             self.assertEqual(candidate["package"], package)
             self.assertTrue(candidate["disable_allowed"])
             self.assertTrue(candidate["remove_for_primary_user_allowed"])
+
+    def test_xiaomi_rule_is_scoped_and_rechecked_on_apply(self):
+        phone = Phone("Xiaomi", "com.miui.msa.global")
+        self.assertTrue(oem.report(phone)["recommendation_controls_to_check"])
+        op = dict(kind="disable", target=phone.package, value=3)
+        approval = plan.create_plan(phone, [op], self.source)
+        phone.role_holder = phone.package
+        with self.assertRaises(adb.DeviceError):
+            plan.apply(phone, self.source, approval, self.journal)
+        self.assertFalse(phone.mutations)
+        phone.role_holder = None
+        phone.brand = "OPPO"
+        self.assertFalse(oem.verified_candidates(phone))
+
+    def test_truncated_uid_listing_is_not_evidence_of_an_unshared_uid(self):
+        phone = Phone()
+        shell = phone.shell
+        def partial(*words):
+            if "-U" in words:
+                return f"package:{phone.package} uid:10124\npackage:com.example.other uid:"
+            return shell(*words)
+        with patch.object(phone, "shell", side_effect=partial):
+            self.assertEqual(oem.verified_candidates(phone), [])
+            with self.assertRaises(adb.DeviceError):
+                oem.verified_candidates(phone, strict=True)
 
     def test_optional_preinstall_works_on_other_brands_without_targeting_user_apps(self):
         phone = Phone("other", "com.netflix.mediaclient")

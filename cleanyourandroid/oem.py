@@ -17,6 +17,7 @@ class Rule:
     purpose: str
     impact: str
     markers: tuple[str, ...]
+    is_store: bool = False
 
 
 RULES = {
@@ -26,11 +27,27 @@ RULES = {
     "com.heytap.market": Rule(
         "oppo", "OPPO App Market", "OEM app store and recommendations.",
         "Use the in-app recommendation controls first if you rely on App Market or its updates.",
-        ("com.heytap.market.", "com.oppo.market.", "/AppMarket", "/HeytapMarket")),
+        ("com.heytap.market.", "com.oppo.market.", "/AppMarket", "/HeytapMarket"), is_store=True),
     "com.vivo.appstore": Rule(
         "vivo", "vivo V-Appstore", "OEM app store that may provide Hot Apps and Hot Games.",
         "This can stop an OEM store or updater you use. Try turning off Hot Apps and Hot Games inside the store first.",
-        ("com.vivo.appstore.", "/VivoAppStore", "/AppStore")),
+        ("com.vivo.appstore.", "/VivoAppStore", "/AppStore"), is_store=True),
+    "com.bbk.appstore": Rule(
+        "vivo", "vivo app store", "Alternate V-Appstore package on some vivo builds.",
+        "OEM-only apps may lose their update source. Try the store's recommendation switches first.",
+        ("com.bbk.appstore.", "/VivoAppStore/", "/BBKAppStore/"), is_store=True),
+    "com.miui.msa.global": Rule(
+        "xiaomi", "Xiaomi System Ads (global)", "Supplies recommendations on some MIUI and HyperOS builds.",
+        "Some OEM apps may lose promotions or sponsored content. Check the apps you use after disabling.",
+        ("/MSA-Global/", "/MsaGlobal/", "com.miui.systemAdSolution.", "com.miui.msa.global.")),
+    "com.miui.systemAdSolution": Rule(
+        "xiaomi", "Xiaomi System Ads", "Regional Xiaomi system advertising component.",
+        "Some OEM apps may lose recommendations. Other ad surfaces have their own controls.",
+        ("/SystemAdSolution/", "/MSA/", "com.miui.systemAdSolution.")),
+    "com.opos.ads": Rule(
+        "oppo", "OPPO advertising service", "Advertising component on some ColorOS builds.",
+        "OEM app promotions may change. Check the apps and store features you rely on.",
+        ("com.opos.ads.", "/OppoAds/", "/OposAds/")),
     "com.netflix.mediaclient": Rule(
         None, "Netflix", "Optional streaming app when supplied as a system preinstall.",
         "Netflix and its downloads will be inaccessible until you restore the app.",
@@ -47,6 +64,11 @@ RULES = {
 
 
 OEM_AD_CONTROLS = {
+    "xiaomi": [
+        "Search Settings for Authorization & revocation and look for msa if present.",
+        "Check Receive recommendations in Security, Themes, GetApps and other apps showing promotions.",
+        "Personalized ad recommendations changes targeting; switching it off does not remove all ads.",
+    ],
     "oppo": [
         "In App Market, check My Account → Settings → Privacy Settings → Ads & recommendations, if available.",
         "Look for App Content in Security & Privacy and personalized recommendations in the Phone Manager settings.",
@@ -68,7 +90,8 @@ def packages(device, *options):
 
 
 def manufacturer(device):
-    return device.prop("ro.product.manufacturer").strip().casefold()
+    name = device.prop("ro.product.manufacturer").strip().casefold()
+    return "xiaomi" if name in {"redmi", "poco"} else name
 
 
 def applies_to(rule, brand):
@@ -108,7 +131,12 @@ def verified_candidates(device, *, strict=False):
     try:
         protected = protected_packages(device)
         raw = device.shell("pm", "list", "packages", "--user", "0", "-U", "-u")
-        uid_map = {name: int(uid) for name, uid in re.findall(r"(?m)^package:([^\s]+)\s+uid:(\d+)\s*$", raw)}
+        uid_map = {}
+        for line in raw.splitlines():
+            match = re.fullmatch(r"package:(\S+)[ \t]+uid:(\d+)", line.strip())
+            if not match or match[1] in uid_map:
+                raise DeviceError("Cannot verify the complete package UID list.")
+            uid_map[match[1]] = int(match[2])
     except DeviceError:
         if strict:
             raise
@@ -130,7 +158,7 @@ def verified_candidates(device, *, strict=False):
             continue
         # Per-user removal can reliably retain the same version only for an APK on the system image.
         base_image = all(path.startswith(IMAGE_PREFIXES) for path in code_paths) and "UPDATED_SYSTEM_APP" not in dump
-        store_fallback = rule.manufacturer not in {"oppo", "vivo"} or "com.android.vending" in enabled
+        store_fallback = not rule.is_store or "com.android.vending" in enabled
         rows.append({
             "package": name, "label": rule.label, "reason": rule.purpose, "impact": rule.impact,
             "disable_allowed": name in enabled and store_fallback,

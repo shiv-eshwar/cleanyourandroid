@@ -10,12 +10,15 @@ The report shows the recommendation controls to check, the current Private DNS s
 
 | Phone | Initial candidate | What to check first |
 | --- | --- | --- |
-| OPPO ColorOS | OPPO App Market `com.heytap.market` | Look for **Ads & recommendations** in App Market privacy settings. Some builds also offer **App Content** in Security & Privacy and a separate recommendations toggle in Phone Manager. |
-| vivo Funtouch OS | V-Appstore `com.vivo.appstore` | Check V-Appstore settings for **Hot Apps** and **Hot Games**. Review lock-screen and launcher suggestions separately where available. |
+| OPPO ColorOS | OPPO App Market `com.heytap.market`; advertising component `com.opos.ads` | Look for **Ads & recommendations** in App Market privacy settings. Some builds also offer **App Content** in Security & Privacy and a separate recommendations toggle in Phone Manager. |
+| vivo Funtouch OS | V-Appstore `com.vivo.appstore` or `com.bbk.appstore` | Check V-Appstore settings for **Hot Apps** and **Hot Games**. Review lock-screen and launcher suggestions separately where available. |
+| Xiaomi MIUI / HyperOS (including Redmi and POCO) | System Ads: `com.miui.msa.global` or `com.miui.systemAdSolution` | Search Settings for **Authorization & revocation → msa**. Check **Receive recommendations** in Security, Themes and GetApps. Menus vary by region; changing ad personalization alone does not remove ads. |
 | Nothing OS | Aura `com.aura.oobe.solutions` | Check the app or notification channel responsible for recommendations. |
 | Other Android builds | Verified Netflix, Amazon Shopping, and Booking.com system preinstalls | Review each optional app you use. Android settings and Private DNS can address other recommendations and some network ads. |
 
-The cross-brand rules only qualify these apps when they arrived as system preinstalls. Apps installed by the user stay outside the debloat list. OPPO and vivo app-store changes require an enabled Google Play Store. Open it and verify you can get the app updates you need before disabling the OEM store. A vendor store can still provide updates that Google Play doesn't offer. Hardware verification for OPPO and vivo is pending. The initial rules and rollback behavior are covered by simulated-device tests. Please [contribute a tested device report or pull request](../CONTRIBUTING.md).
+The cross-brand rules only qualify these apps when they arrived as system preinstalls. Apps installed by the user stay outside the debloat list. OPPO and vivo app-store changes require an enabled Google Play Store. Open it and verify you can get the app updates you need before disabling the OEM store. A vendor store can still provide updates that Google Play doesn't offer. Hardware verification for these OPPO, vivo and Xiaomi rules is pending. The initial rules and rollback behavior are covered by simulated-device tests. Please [contribute a tested device report or pull request](../CONTRIBUTING.md).
+
+Package identities were cross-checked against the [Universal Android Debloater community catalog](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/blob/main/resources/assets/uad_lists.json). A catalog entry alone never authorizes a change.
 
 [OPPO App Market](https://developers.oppomobile.com/) · [ColorOS community guide](https://community.oppo.com/thread/1799696188740468741) · [vivo V-Appstore support](https://www.vivo.com/en/support/questionList?categoryId=55879)
 
